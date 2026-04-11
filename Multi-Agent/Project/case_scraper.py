@@ -27,17 +27,17 @@ from dataclasses import dataclass
 import httpx
 from bs4 import BeautifulSoup
 from pydantic import BaseModel, Field
-import anthropic
+import google.generativeai as genai
 
 # Agent 1 output types (import in real system; redefined here for standalone use)
-from justicegrid_agent1_fir_extractor import (
+from fir_extracter import (
     FIRBundle, FIRRecord, ChargeSection, AccusedProfile
 )
 
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s — %(message)s")
 logger = logging.getLogger("JusticeGrid.Agent2")
 
-ANTHROPIC_CLIENT = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+GEMINI_MODEL = genai.GenerativeModel("gemini-1.5-pro")
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -104,7 +104,7 @@ class BailApplication(BaseModel):
 
 class RelatedCase(BaseModel):
     case_number: str
-    case_type: str                          # "CR", "CRL", "Sessions", etc.
+    case_type: str                          
     court_name: str
     court_code: str
     state_code: str
@@ -544,18 +544,17 @@ CANDIDATE RELATED CASES ({len(candidates)} found):
 """
 
     try:
-        response = ANTHROPIC_CLIENT.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=3000,
-            system=RELATED_CASE_SYSTEM,
-            messages=[{"role": "user", "content": prompt}],
+        combined_prompt = f"System Rules:\n{RELATED_CASE_SYSTEM}\n\nTask:\n{prompt}"
+        response = GEMINI_MODEL.generate_content(
+            combined_prompt,
+            generation_config={"temperature": 0.2, "response_mime_type": "application/json"}
         )
-        raw = response.content[0].text.strip()
+        raw = response.text.strip()
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
         return json.loads(raw)
     except Exception as e:
-        logger.error(f"Claude classification failed: {e}")
+        logger.error(f"Gemini classification failed: {e}")
         return []
 
 
@@ -591,13 +590,12 @@ async def parse_bail_applications(html_or_text: str) -> list[BailApplication]:
     Parse bail application history from case page HTML using Claude.
     """
     try:
-        response = ANTHROPIC_CLIENT.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=2000,
-            system=BAIL_PARSE_SYSTEM,
-            messages=[{"role": "user", "content": html_or_text[:6000]}],
+        combined_prompt = f"System Rules:\n{BAIL_PARSE_SYSTEM}\n\nTask:\nthe html text:\n{html_or_text[:6000]}"
+        response = GEMINI_MODEL.generate_content(
+            combined_prompt,
+            generation_config={"temperature": 0.2, "response_mime_type": "application/json"}
         )
-        raw = response.content[0].text.strip()
+        raw = response.text.strip()
         raw = re.sub(r"^```(?:json)?\s*", "", raw)
         raw = re.sub(r"\s*```$", "", raw)
         items = json.loads(raw)
@@ -729,7 +727,7 @@ async def run_agent2(fir_bundle: FIRBundle) -> CaseCorpus:
     data_sources: list[str] = []
 
     # Parse case ID for court coordinates
-    from justicegrid_agent1_fir_extractor import parse_case_id
+    from fir_extracter import parse_case_id
     parsed = parse_case_id(fir_bundle.case_id)
     state_code = parsed["state_code"]
     case_type  = parsed["case_type"]
@@ -1014,7 +1012,7 @@ async def main():
         fir_bundle = FIRBundle(**bundle_data)
     else:
         # Run Agent 1 inline
-        from justicegrid_agent1_fir_extractor import run_agent1
+        from fir_extracter import run_agent1
         case_id = sys.argv[1] if len(sys.argv) > 1 else "MH/CR/2024/00847"
         logger.info("Running Agent 1 first to get FIR bundle...")
         fir_bundle = await run_agent1(case_id)

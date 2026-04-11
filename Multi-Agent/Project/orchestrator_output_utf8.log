@@ -1,0 +1,163 @@
+﻿python.exe : C:\Users\bhal
+e\OneDrive\Desktop\Airavat
+\Multi-Agent\Project\key_m
+anager.py:3: 
+FutureWarning: 
+At line:1 char:1
++ & "c:\Users\bhale\OneDri
+ve\Desktop\Airavat\venv\Sc
+ripts\python.exe" o ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo        
+      : NotSpecified: (C  
+  :\Users\bhale\...Futu   
+ reWarning: :String) [    
+], RemoteException
+    + FullyQualifiedError 
+   Id : NativeCommandErr  
+  or
+ 
+
+All support for the 
+`google.generativeai` 
+package has ended. It 
+will no longer be 
+receiving 
+updates or bug fixes. 
+Please switch to the 
+`google.genai` package as 
+soon as possible.
+See README for more 
+details:
+
+https://github.com/google-
+gemini/deprecated-generati
+ve-ai-python/blob/main/REA
+DME.md
+
+  import 
+google.generativeai as 
+genai
+[2026-04-12 04:53:29,549] 
+INFO � Initialized 
+KeyManager with 10 API 
+key(s).
+[2026-04-12 04:53:29,553] 
+INFO � ===================
+==========================
+===============
+[2026-04-12 04:53:29,553] 
+INFO � \U0001f680 
+Starting Multi-Agent 
+Pipeline for Case: 
+MH/CR/2024/00847
+[2026-04-12 04:53:29,553] 
+INFO � ===================
+==========================
+===============
+[2026-04-12 04:53:29,554] 
+INFO � Rotated to next 
+API key: AIzaSyDP...mycY
+[2026-04-12 04:53:29,556] 
+ERROR � Agent 1 
+skipped/failed: invalid 
+syntax (fir_extracter.py, 
+line 1)
+[2026-04-12 04:53:29,556] 
+ERROR � Cannot proceed 
+without FIR Data.
+[2026-04-12 04:53:29,557] 
+INFO � Rotated to next 
+API key: AIzaSyDI...rP7E
+[2026-04-12 04:53:29,797] 
+ERROR � Agent 2 
+skipped/failed: No module 
+named 'anthropic'
+[2026-04-12 04:53:29,798] 
+INFO � Rotated to next 
+API key: AIzaSyBe...2ZJ0
+[2026-04-12 04:53:29,799] 
+WARNING � Agent 3 
+skipped/failed: cannot 
+import name 'run_agent3' 
+from 'eligibility_engine' 
+(C:\Users\bhale\OneDrive\D
+esktop\Airavat\Multi-Agent
+\Project\eligibility_engin
+e.py)
+[2026-04-12 04:53:29,800] 
+INFO � Rotated to next 
+API key: AIzaSyBE...7TUI
+[2026-04-12 04:53:29,800] 
+WARNING � Agent 4 
+skipped/failed: cannot 
+import name 'run_agent4' 
+from 'pattern_detector' (C
+:\Users\bhale\OneDrive\Des
+ktop\Airavat\Multi-Agent\P
+roject\pattern_detector.py
+)
+[2026-04-12 04:53:29,801] 
+INFO � Rotated to next 
+API key: AIzaSyCt...hD1k
+[2026-04-12 04:53:29,801] 
+WARNING � Agent 5 
+skipped/failed: No module 
+named 'graph_engine'
+[2026-04-12 04:53:29,801] 
+INFO � Rotated to next 
+API key: AIzaSyAW...fWwU
+[2026-04-12 04:53:29,802] 
+WARNING � Debate Panel 
+skipped/failed: cannot 
+import name 
+'run_debate_round' from 
+'debate' (C:\Users\bhale\O
+neDrive\Desktop\Airavat\Mu
+lti-Agent\Project\debate.p
+y)
+[2026-04-12 04:53:29,803] 
+INFO � Rotated to next 
+API key: AIzaSyAW...fWwU
+[2026-04-12 04:53:29,804] 
+WARNING � Agent 13 
+skipped/failed: cannot 
+import name 'run_agent13' 
+from 'moderate' (C:\Users\
+bhale\OneDrive\Desktop\Air
+avat\Multi-Agent\Project\m
+oderate.py)
+[2026-04-12 04:53:29,804] 
+INFO � Rotated to next 
+API key: AIzaSyAn...PjL4
+[2026-04-12 04:53:29,805] 
+WARNING � Agent 14 
+skipped/failed: cannot 
+import name 'run_agent14' 
+from 'sentiment' (C:\Users
+\bhale\OneDrive\Desktop\Ai
+ravat\Multi-Agent\Project\
+sentiment.py)
+[2026-04-12 04:53:29,805] 
+INFO � ===================
+==========================
+===============
+[2026-04-12 04:53:29,805] 
+INFO � \u2705 Pipeline 
+Completed for 
+MH/CR/2024/00847
+[2026-04-12 04:53:29,805] 
+INFO � ===================
+==========================
+===============
+
+
+================================================================================
+                *** TERMINAL DEBATE AND INSIGHT OUTPUT ***
+================================================================================
+CASE ID: MH/CR/2024/00847
+FIR EXTRACTED: True
+MODERATOR CONSENSUS: Pending
+================================================================================
