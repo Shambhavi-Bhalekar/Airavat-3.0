@@ -51,7 +51,8 @@ def create_case(case: CaseCreate):
         case_dict["eligible"] = True if case_dict.get("bailable") == "Bailable" else False
         
         # Reason
-        case_dict["reason"] = f"Eligible={case_dict['eligible']}, Detention={detention_days}, LLM Conf={case_dict.get('confidence', 0)}"
+        llm_reason = ml_result.get("reasoning")
+        case_dict["reason"] = llm_reason if llm_reason else f"Eligible={case_dict['eligible']}, Detention={detention_days}, LLM Conf={case_dict.get('confidence', 0)}"
 
         # 5. Insert into DB
         response = supabase.table("cases").insert(case_dict).execute()
@@ -106,10 +107,10 @@ def predict_all_cases():
             
             updates = ml_result
             updates["detention_days"] = detention_days
-            
             if "bailable" in case:
                 updates["eligible"] = True if case.get("bailable") == "Bailable" else False
-                updates["reason"] = f"Eligible={updates['eligible']}, Detention={detention_days}, LLM Conf={updates.get('confidence', 0)}"
+                llm_reason = ml_result.get("reasoning")
+                updates["reason"] = llm_reason if llm_reason else f"Eligible={updates['eligible']}, Detention={detention_days}, LLM Conf={updates.get('confidence', 0)}"
 
             # Push back to DB safely - only updating ML fields
             supabase.table("cases").update(updates).eq("id", case["id"]).execute()

@@ -31,8 +31,9 @@ def format_gemma_prompt(case_data: dict) -> str:
     3. "adjournment_prob": an estimated percentage (0-100) of this case being adjourned, based on generic behavior for similar cases.
     4. "confidence": a float between 0.0 and 1.0 representing your confidence in this analysis.
     5. "conflict_flag": "SERIOUS_OFFENCE" if max_sentence >= 20, else null.
+    6. "reasoning": a concise, one-sentence explanation of why the priority score was assigned.
     
     Respond strictly with valid JSON.
-    Example: {{"priority_score": 150, "priority_level": "MEDIUM", "adjournment_prob": 60, "confidence": 0.85, "conflict_flag": null}}
+    Example: {{"priority_score": 150, "priority_level": "MEDIUM", "adjournment_prob": 60, "confidence": 0.85, "conflict_flag": null, "reasoning": "High detention days and serious IPC section warrant medium-high priority."}}
     """
     return prompt.strip()

@@ -47,10 +47,11 @@ Supabase (Cloud DB)   Local Gemma-4 (LLM Engine)
 
 * ✅ **Client & Case Management**: Robust CRUD APIs with validation.
 * ✅ **Local AI Scoring**: Powered by Google's Gemma-4-E4B for privacy and zero cost.
-* ✅ **Bail Eligibility**: Automated detection based on IPC/BNS mapping.
-* ✅ **Priority Scoring**: Intelligent ranking based on detention, severity, and LLM reasoning.
+* ✅ **Bail Eligibility**: Detection based on `bailable` status in case data.
+* ✅ **Priority Scoring**: Intelligent ranking (0-200) based on detention, severity, and LLM reasoning.
 * ✅ **Secure Database**: Cloud-hosted Supabase integration with environment security.
-* ✅ **Explainable AI**: Every score comes with an LLM-generated reason and confidence score.
+* ✅ **Explainable AI**: Every score comes with a concise LLM-generated reasoning and confidence score.
+* ✅ **Retroactive Analysis**: Trigger system-wide re-scoring via `/predict-all` endpoint.
 
 ---
 
@@ -116,9 +117,12 @@ uvicorn main:app --reload
 
 API Documentation will be available at: `http://127.0.0.1:8000/docs`
 
----
+### Useful Endpoints
 
-## ⚖️ Priority Scoring Logic
+* `POST /case`: Create a new case and trigger AI scoring.
+* `POST /predict-all`: High-utility endpoint to retroactively score every case in the database using the current LLM configuration.
+
+---
 
 Every case is analyzed by the **Gemma-4** model using the following parameters:
 
@@ -126,6 +130,11 @@ Every case is analyzed by the **Gemma-4** model using the following parameters:
 2. **Time Sensitivity**: How many days has the client been in detention?
 3. **Severity**: Is the `max_sentence` >= 20 years (Serious Offence)?
 4. **LLM Reasoning**: Dynamic analysis of the case report details.
+
+**Scoring Thresholds:**
+* 🔴 **HIGH**: > 180 score
+* 🟡 **MEDIUM**: > 120 score
+* 🟢 **LOW**: ≤ 120 score
 
 ---
 
