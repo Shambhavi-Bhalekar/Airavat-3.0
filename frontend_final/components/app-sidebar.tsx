@@ -30,18 +30,11 @@ interface NavItem {
 
 const paralegalNav: NavItem[] = [
   { title: "Dashboard", href: "/paralegal", icon: LayoutDashboard },
-  { title: "Case Queue", href: "/paralegal/case-queue", icon: Scale, badge: 187 },
-  { title: "Window Closing", href: "/paralegal/window-closing", icon: Clock, badge: 45 },
-  { title: "Lawyer Review", href: "/paralegal/lawyer-review", icon: UserCheck, badge: 23 },
-  { title: "Family Updates", href: "/paralegal/family-updates", icon: MessageSquare },
   { title: "New Case Entry", href: "/paralegal/case-entry", icon: FilePlus },
 ]
 
 const coordinatorNav: NavItem[] = [
   { title: "Dashboard", href: "/coordinator", icon: LayoutDashboard },
-  { title: "Prison View", href: "/coordinator/prison-view", icon: Building2 },
-  { title: "Analytics", href: "/coordinator/analytics", icon: BarChart3 },
-  { title: "Reports", href: "/coordinator/reports", icon: FileText },
 ]
 
 interface AppSidebarProps {
@@ -124,40 +117,7 @@ function SidebarContent({
           )
         })}
 
-        <div className="mb-2 mt-6 px-3 text-xs font-medium uppercase tracking-wider text-white/50">
-          System
-        </div>
-        <Link
-          href={`/${role}/alerts`}
-          onClick={onClose}
-          className={cn(
-            "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-            pathname.includes("/alerts")
-              ? "bg-[#2A4A7B] text-white"
-              : "text-white/70 hover:bg-[#2A4A7B]/50 hover:text-white"
-          )}
-        >
-          <Bell className="h-4 w-4 shrink-0" />
-          <span className="flex-1">Alerts</span>
-          {alerts! > 0 && (
-            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#B91C1C] px-1.5 text-xs font-medium text-white">
-              {alerts}
-            </span>
-          )}
-        </Link>
-        <Link
-          href={`/${role}/settings`}
-          onClick={onClose}
-          className={cn(
-            "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-            pathname.includes("/settings")
-              ? "bg-[#2A4A7B] text-white"
-              : "text-white/70 hover:bg-[#2A4A7B]/50 hover:text-white"
-          )}
-        >
-          <Settings className="h-4 w-4 shrink-0" />
-          <span className="flex-1">Settings</span>
-        </Link>
+
       </nav>
 
       {/* Footer */}

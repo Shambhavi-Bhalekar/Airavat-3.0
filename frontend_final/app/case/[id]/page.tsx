@@ -110,19 +110,12 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
         if (found) {
           setCaseData(found)
         } else {
-          // Fallback: try mock data
-          import("@/lib/mock-data").then(m => {
-            const mock = m.mockCases.find(c => c.id === id)
-            setCaseData(mock ?? null)
-          })
+          setCaseData(null)
         }
       })
-      .catch(() => {
-        // On network error, fall back to mock data
-        import("@/lib/mock-data").then(m => {
-          const mock = m.mockCases.find(c => c.id === id)
-          setCaseData(mock ?? null)
-        })
+      .catch((err) => {
+        console.error("Failed to load case data:", err)
+        setCaseData(null)
       })
       .finally(() => setLoading(false))
   }, [id])
@@ -193,18 +186,6 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
               <Button onClick={() => setIsDeleteDialogOpen(true)} variant="outline" size="sm" className="gap-2 border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300">
                 <Trash2 className="h-4 w-4" />
                 <span className="hidden sm:inline">Delete Case</span>
-              </Button>
-              <Button variant="outline" size="sm" className="gap-2 border-[#D4D0C5] text-[#1B3A6B] hover:bg-[#E8E5DC]">
-                <Printer className="h-4 w-4" />
-                <span className="hidden sm:inline">Print Brief</span>
-              </Button>
-              <Button variant="outline" size="sm" className="gap-2 border-[#D4D0C5] text-[#1B3A6B] hover:bg-[#E8E5DC]">
-                <Download className="h-4 w-4" />
-                <span className="hidden sm:inline">Export</span>
-              </Button>
-              <Button variant="outline" size="sm" className="gap-2 border-[#D4D0C5] text-[#1B3A6B] hover:bg-[#E8E5DC]">
-                <Share2 className="h-4 w-4" />
-                <span className="hidden sm:inline">Share</span>
               </Button>
             </div>
           </div>
@@ -388,42 +369,7 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
 
             {/* Right Column - Actions & Quick Info */}
             <div className="space-y-6">
-              {/* Quick Actions */}
-              <Card className="bg-white border-[#D4D0C5]">
-                <CardHeader>
-                  <CardTitle className="text-base text-[#1B3A6B]">Quick Actions</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {caseData.eligibility.isEligible && !caseData.applicationReady && (
-                    <Button className="w-full justify-start gap-2 bg-[#1B3A6B] hover:bg-[#2A4A7B]">
-                      <FileText className="h-4 w-4" />
-                      Prepare Bail Application
-                    </Button>
-                  )}
-                  {caseData.eligibility.requiresLawyerReview && (
-                    <Button variant="outline" className="w-full justify-start gap-2 text-[#B45309] border-[#B45309]/30 hover:bg-[#B45309]/5">
-                      <AlertTriangle className="h-4 w-4" />
-                      Send for Lawyer Review
-                    </Button>
-                  )}
-                  {caseData.eligibility.requiresHumanResolution && (
-                    <Button variant="outline" className="w-full justify-start gap-2 text-[#B91C1C] border-[#B91C1C]/30 hover:bg-[#B91C1C]/5">
-                      <User className="h-4 w-4" />
-                      Resolve Identity Mismatch
-                    </Button>
-                  )}
-                  <Button variant="outline" className="w-full justify-start gap-2 border-[#D4D0C5] text-[#1B3A6B] hover:bg-[#E8E5DC]">
-                    <Calendar className="h-4 w-4" />
-                    Schedule Visit
-                  </Button>
-                  {caseData.familyNotificationOptIn && (
-                    <Button variant="outline" className="w-full justify-start gap-2 border-[#D4D0C5] text-[#1B3A6B] hover:bg-[#E8E5DC]">
-                      <Phone className="h-4 w-4" />
-                      Send Family Update
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
+
 
               {/* Next Hearing */}
               {caseData.nextHearing && (

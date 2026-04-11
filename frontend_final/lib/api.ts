@@ -175,18 +175,16 @@ export function adaptBackendCase(raw: BackendCase, index: number): Case {
     priorityRank: index + 1,
     priorityReason: raw.reason ?? 'AI scoring pending',
 
-    nextHearing: raw.next_hearing_date
-      ? {
-          date: raw.next_hearing_date,
-          court: raw.court_name ?? 'Unknown Court',
-          judge: '—',
-          purpose: raw.hearing_outcome ?? 'Hearing',
-          adjournmentProbability: toConfidenceScore(
-            (raw.adjournment_prob ?? 50) / 100
-          ),
-          consecutiveAdjournments: 0,
-        }
-      : null,
+    nextHearing: {
+      date: raw.next_hearing_date ?? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      court: raw.court_name ?? 'Assignment Pending',
+      judge: '—',
+      purpose: raw.hearing_outcome ?? 'Initial Hearing',
+      adjournmentProbability: toConfidenceScore(
+        (raw.adjournment_prob ?? 50) / 100
+      ),
+      consecutiveAdjournments: 0,
+    },
     hearingHistory: [],
 
     surety:

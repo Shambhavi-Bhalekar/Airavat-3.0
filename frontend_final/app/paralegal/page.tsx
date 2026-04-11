@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation"
 import { AppHeader } from "@/components/app-header"
 import { StatsCard } from "@/components/stats-card"
 import { CaseCard } from "@/components/case-card"
-import { AlertCard } from "@/components/alert-card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { mockAlerts, mockDashboardStats } from "@/lib/mock-data"
 import { fetchCases } from "@/lib/api"
 import type { Case } from "@/lib/types"
 import {
@@ -33,7 +31,6 @@ import {
 export default function ParalegalDashboard() {
   const router = useRouter()
   const [sortBy, setSortBy] = useState<'priority' | 'date' | 'detention'>('priority')
-  const [alerts, setAlerts] = useState(mockAlerts.filter(a => !a.acknowledged))
   const [cases, setCases] = useState<Case[]>([])
   const [loading, setLoading] = useState(true)
   const [apiError, setApiError] = useState<string | null>(null)
@@ -65,20 +62,12 @@ export default function ParalegalDashboard() {
     return new Date(b.lastActionDate).getTime() - new Date(a.lastActionDate).getTime()
   })
 
-  const handleAcknowledgeAlert = (alertId: string) => {
-    setAlerts(prev => prev.filter(a => a.id !== alertId))
-  }
-
-  // Derive live stats from real data (fall back to mockDashboardStats numbers if empty)
+  // Derive live stats from real connected DB data
   const liveStats = {
-    eligibleNow: cases.length > 0 ? eligibleCases.length : mockDashboardStats.eligibleNow,
-    windowClosing: cases.length > 0 ? windowClosingCases.length : mockDashboardStats.windowClosing,
-    lawyerReviewRequired: cases.length > 0 ? reviewCases.length : mockDashboardStats.lawyerReviewRequired,
-    totalCases: cases.length > 0 ? cases.length : mockDashboardStats.totalCases,
-    bailsFiledThisMonth: mockDashboardStats.bailsFiledThisMonth,
-    bailsGrantedThisMonth: mockDashboardStats.bailsGrantedThisMonth,
-    avgProcessingDays: mockDashboardStats.avgProcessingDays,
-    pendingActions: mockDashboardStats.pendingActions,
+    eligibleNow: cases.length > 0 ? eligibleCases.length : 0,
+    windowClosing: cases.length > 0 ? windowClosingCases.length : 0,
+    lawyerReviewRequired: cases.length > 0 ? reviewCases.length : 0,
+    totalCases: cases.length > 0 ? cases.length : 0,
   }
 
   return (
@@ -124,34 +113,12 @@ export default function ParalegalDashboard() {
             variant="info"
           />
           <StatsCard
-            title="Bails Filed"
-            value={liveStats.bailsFiledThisMonth}
-            subtitle={`${liveStats.bailsGrantedThisMonth} granted this month`}
-            icon={CheckCircle2}
-            trend={{ value: 8, direction: 'up', label: 'vs last month' }}
+            title="Total Tracked Cases"
+            value={liveStats.totalCases}
+            subtitle="Undertrials currently loaded"
+            icon={Scale}
           />
         </div>
-
-        {/* Active Alerts */}
-        {alerts.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-[#1B3A6B]">Active Alerts</h2>
-              <Button variant="ghost" size="sm" className="text-xs text-[#1B3A6B] hover:bg-[#E8E5DC]">
-                View All
-              </Button>
-            </div>
-            <div className="grid gap-2 md:grid-cols-2">
-              {alerts.slice(0, 4).map((alert) => (
-                <AlertCard
-                  key={alert.id}
-                  alert={alert}
-                  onAcknowledge={() => handleAcknowledgeAlert(alert.id)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Case Queue */}
         <div className="space-y-4">
@@ -195,10 +162,6 @@ export default function ParalegalDashboard() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button variant="outline" size="sm" className="gap-2 border-[#D4D0C5] text-[#1B3A6B] hover:bg-[#E8E5DC]">
-                <Filter className="h-3 w-3" />
-                Filter
-              </Button>
             </div>
           </div>
 
@@ -228,48 +191,7 @@ export default function ParalegalDashboard() {
           )}
         </div>
 
-        {/* Quick Stats Footer */}
-        <div className="grid gap-3 sm:gap-4 sm:grid-cols-3 pt-4 border-t border-[#D4D0C5]">
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-white border border-[#D4D0C5]">
-            <div className="p-2 rounded-lg bg-[#166534]/10">
-              <TrendingUp className="h-5 w-5 text-[#166534]" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-[#1B3A6B]">
-                Avg Processing Time
-              </p>
-              <p className="text-xs text-[#5A6A7A]">
-                {liveStats.avgProcessingDays} days from eligibility to filing
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-white border border-[#D4D0C5]">
-            <div className="p-2 rounded-lg bg-[#1B3A6B]/10">
-              <FileText className="h-5 w-5 text-[#1B3A6B]" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-[#1B3A6B]">
-                Pending Actions
-              </p>
-              <p className="text-xs text-[#5A6A7A]">
-                {liveStats.pendingActions} cases need attention today
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-white border border-[#D4D0C5]">
-            <div className="p-2 rounded-lg bg-[#B45309]/10">
-              <Clock className="h-5 w-5 text-[#B45309]" />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-[#1B3A6B]">
-                Total Active Cases
-              </p>
-              <p className="text-xs text-[#5A6A7A]">
-                {liveStats.totalCases} undertrials tracked
-              </p>
-            </div>
-          </div>
-        </div>
+
       </div>
     </div>
   )
