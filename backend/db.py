@@ -2,9 +2,11 @@ import os
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
-# Load environment variables from .env file (one directory up)
-env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
-load_dotenv(env_path)
+# Load environment variables from backend/.env first, then fallback to project root .env.
+backend_env_path = os.path.join(os.path.dirname(__file__), ".env")
+root_env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+load_dotenv(backend_env_path)
+load_dotenv(root_env_path)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
