@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,6 +15,8 @@ import {
   AlertTriangle,
   ChevronRight,
   CheckCircle2,
+  Menu,
+  X,
 } from "lucide-react"
 
 const features = [
@@ -57,18 +60,21 @@ const stats = [
 ]
 
 export default function LandingPage() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
   return (
     <div className="min-h-screen bg-[#F5F3EE]">
       {/* Header */}
-      <header className="border-b border-[#D4D0C5] bg-[#1B3A6B]">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4">
+      <header className="border-b border-[#D4D0C5] bg-[#1B3A6B] sticky top-0 z-40">
+        <div className="container mx-auto flex h-14 sm:h-16 items-center justify-between px-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#C9A84C]">
-              <Shield className="h-5 w-5 text-[#1B3A6B]" />
+            <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg bg-[#C9A84C]">
+              <Shield className="h-4 w-4 sm:h-5 sm:w-5 text-[#1B3A6B]" />
             </div>
-            <span className="text-lg font-semibold tracking-tight text-white">JusticeGrid</span>
+            <span className="text-base sm:text-lg font-semibold tracking-tight text-white">JusticeGrid</span>
           </div>
           
+          {/* Desktop nav */}
           <nav className="hidden md:flex items-center gap-6">
             <Link href="#features" className="text-sm text-white/70 hover:text-white transition-colors">
               Features
@@ -81,7 +87,7 @@ export default function LandingPage() {
             </Link>
           </nav>
 
-          <div className="flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-3">
             <Link href="/login">
               <Button variant="outline" size="sm" className="border-white/30 text-white hover:bg-white/10 hover:text-white bg-transparent">
                 Sign In
@@ -93,36 +99,72 @@ export default function LandingPage() {
               </Button>
             </Link>
           </div>
+
+          {/* Mobile hamburger */}
+          <button
+            className="flex md:hidden h-9 w-9 items-center justify-center rounded-lg text-white hover:bg-white/10 transition-colors"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          >
+            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
+
+        {/* Mobile menu dropdown */}
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-white/10 bg-[#1B3A6B] px-4 py-4 space-y-3">
+            {["Features", "About", "Compliance"].map(item => (
+              <Link
+                key={item}
+                href={`#${item.toLowerCase()}`}
+                onClick={() => setMobileMenuOpen(false)}
+                className="block text-sm text-white/70 hover:text-white py-1 transition-colors"
+              >
+                {item}
+              </Link>
+            ))}
+            <div className="flex flex-col gap-2 pt-2 border-t border-white/10">
+              <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
+                <Button variant="outline" size="sm" className="w-full border-white/30 text-white hover:bg-white/10 hover:text-white bg-transparent">
+                  Sign In
+                </Button>
+              </Link>
+              <Link href="/signup" onClick={() => setMobileMenuOpen(false)}>
+                <Button size="sm" className="w-full bg-[#C9A84C] text-[#1B3A6B] hover:bg-[#D4B85C]">
+                  Create Account
+                </Button>
+              </Link>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* Hero */}
-      <section className="py-20 md:py-32 bg-gradient-to-b from-[#1B3A6B] to-[#2A4A7B]">
+      <section className="py-14 sm:py-20 md:py-32 bg-gradient-to-b from-[#1B3A6B] to-[#2A4A7B]">
         <div className="container mx-auto px-4 text-center">
-          <div className="inline-flex items-center gap-2 rounded-full bg-[#C9A84C]/20 px-4 py-1.5 text-sm text-[#C9A84C] mb-6 border border-[#C9A84C]/30">
-            <CheckCircle2 className="h-4 w-4" />
+          <div className="inline-flex items-center gap-2 rounded-full bg-[#C9A84C]/20 px-4 py-1.5 text-xs sm:text-sm text-[#C9A84C] mb-6 border border-[#C9A84C]/30">
+            <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             UTRC Framework Compliant
           </div>
           
-          <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-white max-w-4xl mx-auto text-balance">
+          <h1 className="text-3xl sm:text-4xl md:text-6xl font-bold tracking-tight text-white max-w-4xl mx-auto text-balance">
             AI-Powered Undertrial Rights Management for Indian DLSAs
           </h1>
           
-          <p className="mt-6 text-lg md:text-xl text-white/80 max-w-2xl mx-auto text-pretty">
+          <p className="mt-4 sm:mt-6 text-base sm:text-lg md:text-xl text-white/80 max-w-2xl mx-auto text-pretty">
             Identify Section 479 BNSS eligible undertrials, surface actionable interventions, 
             and generate systemic intelligence - with full transparency and ethical safeguards.
           </p>
 
-          <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/login?role=paralegal">
-              <Button size="lg" className="gap-2 bg-[#C9A84C] text-[#1B3A6B] hover:bg-[#D4B85C]">
+          <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 sm:gap-4">
+            <Link href="/login?role=paralegal" className="w-full sm:w-auto">
+              <Button size="lg" className="w-full gap-2 bg-[#C9A84C] text-[#1B3A6B] hover:bg-[#D4B85C]">
                 <Users className="h-5 w-5" />
                 Paralegal Workstation
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </Link>
-            <Link href="/login?role=coordinator">
-              <Button variant="outline" size="lg" className="gap-2 border-white/30 text-white hover:bg-white/10 bg-transparent">
+            <Link href="/login?role=coordinator" className="w-full sm:w-auto">
+              <Button variant="outline" size="lg" className="w-full gap-2 border-white/30 text-white hover:bg-white/10 bg-transparent">
                 <BarChart3 className="h-5 w-5" />
                 UTRC Coordinator Dashboard
               </Button>
@@ -130,11 +172,11 @@ export default function LandingPage() {
           </div>
 
           {/* Stats */}
-          <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-8 max-w-3xl mx-auto">
+          <div className="mt-12 sm:mt-16 grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-8 max-w-3xl mx-auto">
             {stats.map((stat) => (
-              <div key={stat.label} className="bg-white/10 rounded-lg p-4 backdrop-blur-sm border border-white/20">
-                <p className="text-3xl font-bold text-[#C9A84C]">{stat.value}</p>
-                <p className="text-sm text-white/70 mt-1">{stat.label}</p>
+              <div key={stat.label} className="bg-white/10 rounded-lg p-3 sm:p-4 backdrop-blur-sm border border-white/20">
+                <p className="text-2xl sm:text-3xl font-bold text-[#C9A84C]">{stat.value}</p>
+                <p className="text-xs sm:text-sm text-white/70 mt-1">{stat.label}</p>
               </div>
             ))}
           </div>

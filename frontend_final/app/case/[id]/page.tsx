@@ -1,6 +1,6 @@
 "use client"
 
-import { use } from "react"
+import { use, useEffect, useState } from "react"
 import { notFound } from "next/navigation"
 import Link from "next/link"
 import { AppHeader } from "@/components/app-header"
@@ -15,7 +15,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { mockCases } from "@/lib/mock-data"
+import { fetchCases, updateCase } from "@/lib/api"
+import type { Case } from "@/lib/types"
 import {
   ArrowLeft,
   User,
@@ -31,6 +32,7 @@ import {
   Download,
   Printer,
   Share2,
+  Loader2,
 } from "lucide-react"
 
 interface CaseDetailPageProps {
@@ -39,8 +41,65 @@ interface CaseDetailPageProps {
 
 export default function CaseDetailPage({ params }: CaseDetailPageProps) {
   const { id } = use(params)
-  const caseData = mockCases.find(c => c.id === id)
-  
+  const [caseData, setCaseData] = useState<Case | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [noteText, setNoteText] = useState("")
+  const [savingNote, setSavingNote] = useState(false)
+
+  useEffect(() => {
+    fetchCases()
+      .then(cases => {
+        const found = cases.find(c => c.id === id)
+        if (found) {
+          setCaseData(found)
+        } else {
+          // Fallback: try mock data
+          import("@/lib/mock-data").then(m => {
+            const mock = m.mockCases.find(c => c.id === id)
+            setCaseData(mock ?? null)
+          })
+        }
+      })
+      .catch(() => {
+        // On network error, fall back to mock data
+        import("@/lib/mock-data").then(m => {
+          const mock = m.mockCases.find(c => c.id === id)
+          setCaseData(mock ?? null)
+        })
+      })
+      .finally(() => setLoading(false))
+  }, [id])
+
+  const handleAddNote = async () => {
+    if (!noteText.trim() || !caseData) return
+    setSavingNote(true)
+    try {
+      const timestamp = new Date().toLocaleDateString('en-IN')
+      const newNote = `${timestamp}: ${noteText.trim()}`
+      // Try to persist to backend (best-effort)
+      await updateCase(caseData.id, { reason: newNote }).catch(() => {})
+      setCaseData(prev =>
+        prev
+          ? { ...prev, paralegalNotes: [newNote, ...prev.paralegalNotes] }
+          : prev
+      )
+      setNoteText("")
+    } finally {
+      setSavingNote(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#F5F3EE]">
+        <div className="flex flex-col items-center gap-3 text-[#5A6A7A]">
+          <Loader2 className="h-8 w-8 animate-spin text-[#1B3A6B]" />
+          <p className="text-sm">Loading case…</p>
+        </div>
+      </div>
+    )
+  }
+
   if (!caseData) {
     notFound()
   }
@@ -49,7 +108,7 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
     <div className="flex h-screen overflow-hidden bg-[#F5F3EE]">
       <AppSidebar role="paralegal" alerts={4} />
       
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-auto min-w-0">
         <AppHeader
           title="Case Details"
           subtitle={caseData.caseNumber}
@@ -62,25 +121,25 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
 
         <div className="p-6 space-y-6">
           {/* Back & Actions */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <Link href="/paralegal">
               <Button variant="ghost" size="sm" className="gap-2 text-[#1B3A6B] hover:bg-[#E8E5DC]">
                 <ArrowLeft className="h-4 w-4" />
                 Back to Queue
               </Button>
             </Link>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Button variant="outline" size="sm" className="gap-2 border-[#D4D0C5] text-[#1B3A6B] hover:bg-[#E8E5DC]">
                 <Printer className="h-4 w-4" />
-                Print Brief
+                <span className="hidden sm:inline">Print Brief</span>
               </Button>
               <Button variant="outline" size="sm" className="gap-2 border-[#D4D0C5] text-[#1B3A6B] hover:bg-[#E8E5DC]">
                 <Download className="h-4 w-4" />
-                Export
+                <span className="hidden sm:inline">Export</span>
               </Button>
               <Button variant="outline" size="sm" className="gap-2 border-[#D4D0C5] text-[#1B3A6B] hover:bg-[#E8E5DC]">
                 <Share2 className="h-4 w-4" />
-                Share
+                <span className="hidden sm:inline">Share</span>
               </Button>
             </div>
           </div>
@@ -101,7 +160,9 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
                       <StatusBadge status={caseData.eligibility.status} />
                     </div>
                     <p className="text-[#5A6A7A]">
-                      S/o {caseData.fatherName} | {caseData.age} years | {caseData.gender}
+                      {caseData.fatherName !== '—' ? `S/o ${caseData.fatherName} | ` : ''}
+                      {caseData.age > 0 ? `${caseData.age} years | ` : ''}
+                      {caseData.gender}
                     </p>
                     <div className="flex flex-wrap gap-4 mt-2 text-sm text-[#5A6A7A]">
                       <span className="flex items-center gap-1">
@@ -112,10 +173,12 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
                         <MapPin className="h-4 w-4" />
                         {caseData.prison}
                       </span>
-                      <span className="flex items-center gap-1">
-                        <Calendar className="h-4 w-4" />
-                        Arrested {new Date(caseData.arrestDate).toLocaleDateString('en-IN')}
-                      </span>
+                      {caseData.arrestDate && (
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-4 w-4" />
+                          Arrested {new Date(caseData.arrestDate).toLocaleDateString('en-IN')}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -133,7 +196,7 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
 
           {/* Main Content Grid */}
           <div className="grid gap-6 lg:grid-cols-3">
-            {/* Left Column - Eligibility & Details */}
+            {/* Left Column */}
             <div className="lg:col-span-2 space-y-6">
               {/* Eligibility Assessment */}
               <EligibilityCard 
@@ -209,24 +272,39 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
                     
                     <TabsContent value="notes">
                       <div className="space-y-4">
-                        {caseData.paralegalNotes.map((note, index) => (
-                          <div key={index} className="flex gap-3 text-sm">
-                            <span className="text-[#5A6A7A] shrink-0">
-                              {note.split(':')[0]}:
-                            </span>
-                            <span className="text-[#1B3A6B]">
-                              {note.split(':').slice(1).join(':')}
-                            </span>
-                          </div>
-                        ))}
+                        {caseData.paralegalNotes.length > 0 ? (
+                          caseData.paralegalNotes.map((note, index) => (
+                            <div key={index} className="flex gap-3 text-sm">
+                              <span className="text-[#5A6A7A] shrink-0">
+                                {note.split(':')[0]}:
+                              </span>
+                              <span className="text-[#1B3A6B]">
+                                {note.split(':').slice(1).join(':')}
+                              </span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-[#5A6A7A]">No notes yet.</p>
+                        )}
                         
                         <div className="pt-4 border-t border-[#D4D0C5]">
                           <Textarea 
-                            placeholder="Add a note..."
+                            placeholder="Add a note…"
+                            value={noteText}
+                            onChange={e => setNoteText(e.target.value)}
                             className="mb-2 border-[#D4D0C5] focus:border-[#1B3A6B]"
                           />
-                          <Button size="sm" className="gap-2 bg-[#1B3A6B] hover:bg-[#2A4A7B]">
-                            <MessageSquare className="h-4 w-4" />
+                          <Button
+                            size="sm"
+                            className="gap-2 bg-[#1B3A6B] hover:bg-[#2A4A7B]"
+                            onClick={handleAddNote}
+                            disabled={savingNote || !noteText.trim()}
+                          >
+                            {savingNote ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <MessageSquare className="h-4 w-4" />
+                            )}
                             Add Note
                           </Button>
                         </div>

@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { AppHeader } from "@/components/app-header"
 import { StatsCard } from "@/components/stats-card"
 import { PrisonCard } from "@/components/prison-card"
@@ -14,6 +15,8 @@ import {
   mockAlerts,
   mockDistrictComparisons,
 } from "@/lib/mock-data"
+import { fetchCases, predictAll } from "@/lib/api"
+import type { Case } from "@/lib/types"
 import {
   Building2,
   Scale,
@@ -22,12 +25,57 @@ import {
   Download,
   BarChart3,
   MapPin,
+  RefreshCw,
+  Loader2,
+  WifiOff,
 } from "lucide-react"
 
 export default function CoordinatorDashboard() {
-  const totalEligible = mockPrisonSummaries.reduce((acc, p) => acc + p.eligibleUndertrials, 0)
-  const totalUndertrials = mockPrisonSummaries.reduce((acc, p) => acc + p.totalUndertrials, 0)
-  const totalWindowClosing = mockPrisonSummaries.reduce((acc, p) => acc + p.windowClosingCount, 0)
+  const [cases, setCases] = useState<Case[]>([])
+  const [loading, setLoading] = useState(true)
+  const [apiError, setApiError] = useState<string | null>(null)
+  const [rescoring, setRescoring] = useState(false)
+  const [rescoreMsg, setRescoreMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchCases()
+      .then(data => { setCases(data); setApiError(null) })
+      .catch(() => {
+        setApiError("Backend unavailable — stats estimated from mock data")
+        import("@/lib/mock-data").then(m => setCases(m.mockCases))
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handlePredictAll = async () => {
+    setRescoring(true)
+    setRescoreMsg(null)
+    try {
+      const res = await predictAll()
+      setRescoreMsg(`✓ Re-scored ${res.updated_count} cases with Gemma-4`)
+      // Refresh cases after re-scoring
+      const fresh = await fetchCases()
+      setCases(fresh)
+    } catch {
+      setRescoreMsg("Re-scoring failed — is the Gemma-4 server running on port 8001?")
+    } finally {
+      setRescoring(false)
+    }
+  }
+
+  // Derive live stats; fall back to mock prison summary aggregates when no live data
+  const totalEligible = cases.length > 0
+    ? cases.filter(c => c.eligibility.status === 'eligible_now').length
+    : mockPrisonSummaries.reduce((acc, p) => acc + p.eligibleUndertrials, 0)
+
+  const totalUndertrials = cases.length > 0
+    ? cases.length
+    : mockPrisonSummaries.reduce((acc, p) => acc + p.totalUndertrials, 0)
+
+  const totalWindowClosing = cases.length > 0
+    ? cases.filter(c => c.eligibility.status === 'window_closing').length
+    : mockPrisonSummaries.reduce((acc, p) => acc + p.windowClosingCount, 0)
+
   const highAdjournmentCourts = mockCourtBehaviors.filter(c => c.adjournmentRate >= 70).length
 
   return (
@@ -35,13 +83,47 @@ export default function CoordinatorDashboard() {
       <AppHeader
         title="UTRC Coordinator Dashboard"
         subtitle="District-wide undertrial monitoring and systemic intelligence"
-        syncStatus="online"
-        lastSync="5 min ago"
+        syncStatus={apiError ? "offline" : "online"}
+        lastSync={loading ? "Loading…" : apiError ? "Offline" : "Live"}
       />
 
-      <div className="flex-1 p-6 space-y-6">
+      <div className="flex-1 p-4 sm:p-6 space-y-5 sm:space-y-6">
+        {/* API error banner */}
+        {apiError && (
+          <div className="flex items-center gap-3 rounded-lg border border-[#B45309]/30 bg-[#B45309]/5 px-4 py-3 text-sm text-[#B45309]">
+            <WifiOff className="h-4 w-4 shrink-0" />
+            {apiError}
+          </div>
+        )}
+
+        {/* Re-score All + status */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            {rescoreMsg && (
+              <p className={`text-sm ${rescoreMsg.startsWith('✓') ? 'text-[#166534]' : 'text-[#B91C1C]'}`}>
+                {rescoreMsg}
+              </p>
+            )}
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 border-[#D4D0C5] text-[#1B3A6B] hover:bg-[#E8E5DC]"
+            onClick={handlePredictAll}
+            disabled={rescoring || loading}
+          >
+            {rescoring ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            {rescoring ? "Re-scoring…" : "Re-score All Cases (Gemma-4)"}
+          </Button>
+        </div>
+
         {/* Top Stats */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+
+        <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
           <StatsCard
             title="Total Undertrials"
             value={totalUndertrials.toLocaleString()}
@@ -83,7 +165,7 @@ export default function CoordinatorDashboard() {
                 Export Report
               </Button>
             </div>
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
               {mockPrisonSummaries.slice(0, 4).map((prison) => (
                 <PrisonCard key={prison.prisonName} prison={prison} />
               ))}
@@ -93,7 +175,7 @@ export default function CoordinatorDashboard() {
             </Button>
           </div>
 
-          {/* Right Column - Alerts & Quick Actions */}
+          {/* Right Column */}
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-[#1B3A6B]">System Alerts</h2>
             <div className="space-y-2">

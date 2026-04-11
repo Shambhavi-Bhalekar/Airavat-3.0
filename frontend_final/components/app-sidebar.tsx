@@ -1,11 +1,11 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
   LayoutDashboard,
-  Users,
   Building2,
   FileText,
   BarChart3,
@@ -13,11 +13,12 @@ import {
   Settings,
   Scale,
   Shield,
-  AlertTriangle,
   Clock,
   UserCheck,
   MessageSquare,
   FilePlus,
+  X,
+  Menu,
 } from "lucide-react"
 
 interface NavItem {
@@ -44,27 +45,44 @@ const coordinatorNav: NavItem[] = [
 ]
 
 interface AppSidebarProps {
-  role: 'paralegal' | 'coordinator'
+  role: "paralegal" | "coordinator"
   alerts?: number
 }
 
-export function AppSidebar({ role, alerts = 0 }: AppSidebarProps) {
+function SidebarContent({
+  role,
+  alerts,
+  onClose,
+}: AppSidebarProps & { onClose?: () => void }) {
   const pathname = usePathname()
-  const navItems = role === 'paralegal' ? paralegalNav : coordinatorNav
+  const navItems = role === "paralegal" ? paralegalNav : coordinatorNav
 
   return (
-    <aside className="flex h-screen w-64 flex-col bg-[#1B3A6B] text-white border-r border-[#2A4A7B]">
+    <aside className="flex h-full w-64 flex-col bg-[#1B3A6B] text-white border-r border-[#2A4A7B]">
       {/* Logo */}
-      <div className="flex h-16 items-center gap-3 border-b border-[#2A4A7B] px-6">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#C9A84C]">
-          <Shield className="h-5 w-5 text-[#1B3A6B]" />
+      <div className="flex h-16 items-center justify-between border-b border-[#2A4A7B] px-6">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#C9A84C]">
+            <Shield className="h-5 w-5 text-[#1B3A6B]" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold tracking-tight text-white">
+              JusticeGrid
+            </span>
+            <span className="text-xs text-white/70">
+              {role === "paralegal" ? "Paralegal Workstation" : "UTRC Coordinator"}
+            </span>
+          </div>
         </div>
-        <div className="flex flex-col">
-          <span className="text-sm font-semibold tracking-tight text-white">JusticeGrid</span>
-          <span className="text-xs text-white/70">
-            {role === 'paralegal' ? 'Paralegal Workstation' : 'UTRC Coordinator'}
-          </span>
-        </div>
+        {/* Close button visible only on mobile */}
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-white/70 hover:bg-[#2A4A7B] hover:text-white transition-colors lg:hidden"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
       {/* Navigation */}
@@ -73,11 +91,14 @@ export function AppSidebar({ role, alerts = 0 }: AppSidebarProps) {
           Main Menu
         </div>
         {navItems.map((item) => {
-          const isActive = pathname === item.href || (item.href !== `/${role}` && pathname.startsWith(item.href))
+          const isActive =
+            pathname === item.href ||
+            (item.href !== `/${role}` && pathname.startsWith(item.href))
           return (
             <Link
               key={item.href}
               href={item.href}
+              onClick={onClose}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 isActive
@@ -88,12 +109,14 @@ export function AppSidebar({ role, alerts = 0 }: AppSidebarProps) {
               <item.icon className="h-4 w-4 shrink-0" />
               <span className="flex-1">{item.title}</span>
               {item.badge && (
-                <span className={cn(
-                  "flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-medium",
-                  isActive 
-                    ? "bg-[#C9A84C] text-[#1B3A6B]" 
-                    : "bg-[#2A4A7B] text-white/70"
-                )}>
+                <span
+                  className={cn(
+                    "flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-medium",
+                    isActive
+                      ? "bg-[#C9A84C] text-[#1B3A6B]"
+                      : "bg-[#2A4A7B] text-white/70"
+                  )}
+                >
                   {item.badge}
                 </span>
               )}
@@ -106,16 +129,17 @@ export function AppSidebar({ role, alerts = 0 }: AppSidebarProps) {
         </div>
         <Link
           href={`/${role}/alerts`}
+          onClick={onClose}
           className={cn(
             "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-            pathname.includes('/alerts')
+            pathname.includes("/alerts")
               ? "bg-[#2A4A7B] text-white"
               : "text-white/70 hover:bg-[#2A4A7B]/50 hover:text-white"
           )}
         >
           <Bell className="h-4 w-4 shrink-0" />
           <span className="flex-1">Alerts</span>
-          {alerts > 0 && (
+          {alerts! > 0 && (
             <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#B91C1C] px-1.5 text-xs font-medium text-white">
               {alerts}
             </span>
@@ -123,9 +147,10 @@ export function AppSidebar({ role, alerts = 0 }: AppSidebarProps) {
         </Link>
         <Link
           href={`/${role}/settings`}
+          onClick={onClose}
           className={cn(
             "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-            pathname.includes('/settings')
+            pathname.includes("/settings")
               ? "bg-[#2A4A7B] text-white"
               : "text-white/70 hover:bg-[#2A4A7B]/50 hover:text-white"
           )}
@@ -138,19 +163,61 @@ export function AppSidebar({ role, alerts = 0 }: AppSidebarProps) {
       {/* Footer */}
       <div className="border-t border-[#2A4A7B] p-4">
         <div className="flex items-center gap-3 rounded-lg bg-[#2A4A7B]/50 px-3 py-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#C9A84C] text-[#1B3A6B] text-sm font-medium">
-            {role === 'paralegal' ? 'PK' : 'SC'}
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#C9A84C] text-[#1B3A6B] text-sm font-medium">
+            {role === "paralegal" ? "PK" : "SC"}
           </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-white">
-              {role === 'paralegal' ? 'Priya Kumari' : 'Suresh Chandra'}
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-medium text-white truncate">
+              {role === "paralegal" ? "Priya Kumari" : "Suresh Chandra"}
             </span>
-            <span className="text-xs text-white/70">
-              {role === 'paralegal' ? 'DLSA Lucknow' : 'UTRC Coordinator'}
+            <span className="text-xs text-white/70 truncate">
+              {role === "paralegal" ? "DLSA Lucknow" : "UTRC Coordinator"}
             </span>
           </div>
         </div>
       </div>
     </aside>
+  )
+}
+
+export function AppSidebar({ role, alerts = 0 }: AppSidebarProps) {
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  return (
+    <>
+      {/* Mobile hamburger trigger — shown as a floating button, used from AppHeader */}
+      {/* Desktop: always visible */}
+      <div className="hidden lg:flex h-screen shrink-0">
+        <SidebarContent role={role} alerts={alerts} />
+      </div>
+
+      {/* Mobile: drawer overlay */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setMobileOpen(false)}
+          />
+          {/* Drawer */}
+          <div className="absolute left-0 top-0 h-full">
+            <SidebarContent
+              role={role}
+              alerts={alerts}
+              onClose={() => setMobileOpen(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Mobile hamburger button (fixed to top-left when sidebar is closed) */}
+      <button
+        onClick={() => setMobileOpen(true)}
+        className="fixed left-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-lg bg-[#1B3A6B] text-white shadow-lg lg:hidden"
+        aria-label="Open sidebar"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+    </>
   )
 }

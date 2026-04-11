@@ -157,11 +157,78 @@ export default function NewCaseEntryPage() {
     }
   }
 
+  const [submittedCaseId, setSubmittedCaseId] = useState<string | null>(null)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+
   const handleSubmit = async () => {
     setIsSubmitting(true)
-    await new Promise(r => setTimeout(r, 2000))
-    setIsSubmitting(false)
-    setSubmitted(true)
+    setSubmitError(null)
+    try {
+      const { createClient, createCase } = await import("@/lib/api")
+
+      // Use prisonerId as client_id; generate one if blank
+      const clientId = formData.prisonerId.trim() || `CLT-${Date.now()}`
+
+      // 1. Create client record (ignore duplicate errors)
+      await createClient({
+        client_id: clientId,
+        mother_tongue: formData.familyLanguage,
+        family_contact_number: formData.familyPhone || "",
+      }).catch(() => {
+        // Client may already exist — that's fine
+      })
+
+      // 2. Parse max sentence from the first charge
+      const primaryCharge = formData.charges[0]
+      const maxSentenceMap: Record<string, number> = {
+        "1 year": 1, "2 years": 2, "3 years": 3, "5 years": 5,
+        "7 years": 7, "10 years": 10, "14 years": 14, "life": 0,
+      }
+      const maxSentenceYears = maxSentenceMap[primaryCharge.maxSentence] ?? 3
+
+      // 3. Determine bailable status
+      const hasLifeCharge = formData.charges.some(c => c.isLifeImprisonment)
+      const bailable = hasLifeCharge ? "Non-Bailable" : "Bailable"
+
+      // 4. Build ipc section string (join multiple charges with commas)
+      const ipcSections = formData.charges.map(c => `${c.act} ${c.section}`).join(", ")
+      const descriptions = formData.charges.map(c => c.description).join("; ")
+
+      // 5. Build case payload matching backend CaseCreate schema
+      const casePayload = {
+        client_id: clientId,
+        city: formData.district || formData.state || "Unknown",
+        crime_description: descriptions || primaryCharge.description || "Unspecified",
+        assigned_ipc: ipcSections,
+        assigned_bns: undefined,
+        bailable,
+        cognizable: "Cognizable",
+        max_sentence: maxSentenceYears,
+        date_of_occurrence: formData.arrestDate
+          ? new Date(formData.arrestDate).toISOString()
+          : new Date().toISOString(),
+        date_reported: formData.firDate
+          ? new Date(formData.firDate).toISOString()
+          : undefined,
+        report_number: formData.firNumber
+          ? parseInt(formData.firNumber.replace(/\D/g, "")) || undefined
+          : undefined,
+        family_contact_number: formData.familyPhone || undefined,
+        mother_tongue: formData.familyLanguage,
+        prison_name: formData.prison || undefined,
+      }
+
+      const result = await createCase(casePayload)
+      // result.case is an array of inserted rows from Supabase
+      const newCase = Array.isArray(result.case) ? result.case[0] : result.case
+      setSubmittedCaseId((newCase as { id?: string })?.id ?? clientId)
+      setSubmitted(true)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Submission failed"
+      setSubmitError(msg)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   if (submitted) {
@@ -180,13 +247,13 @@ export default function NewCaseEntryPage() {
               <p className="text-sm text-[#5A6A7A]">The case has been entered into the system. AI eligibility assessment will begin shortly.</p>
               <div className="rounded-lg bg-[#F5F3EE] border border-[#D4D0C5] px-4 py-3">
                 <p className="text-xs text-[#5A6A7A]">Case ID</p>
-                <p className="text-base font-mono font-semibold text-[#1B3A6B]">CASE-{Math.floor(Math.random() * 9000) + 1000}</p>
+                <p className="text-base font-mono font-semibold text-[#1B3A6B] break-all">{submittedCaseId ?? '—'}</p>
               </div>
               <div className="flex flex-col gap-2 pt-2">
-                <Button className="bg-[#1B3A6B] hover:bg-[#2A4A7B]" onClick={() => setSubmitted(false)}>
+                <Button className="bg-[#1B3A6B] hover:bg-[#2A4A7B]" onClick={() => { setSubmitted(false); setSubmittedCaseId(null) }}>
                   Add Another Case
                 </Button>
-                <Button variant="outline" className="border-[#D4D0C5] text-[#1B3A6B] hover:bg-[#E8E5DC]">
+                <Button variant="outline" className="border-[#D4D0C5] text-[#1B3A6B] hover:bg-[#E8E5DC]" onClick={() => window.location.href = '/paralegal/case-queue'}>
                   View Case Queue
                 </Button>
               </div>
@@ -733,23 +800,28 @@ export default function NewCaseEntryPage() {
               <ChevronRight className="h-4 w-4" />
             </Button>
           ) : (
-            <Button
-              className="gap-2 bg-[#166534] hover:bg-[#14532D]"
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  <FilePlus className="h-4 w-4" />
-                  Submit Case
-                </>
+            <div className="flex flex-col items-end gap-2">
+              {submitError && (
+                <p className="text-xs text-[#B91C1C] max-w-xs text-right">{submitError}</p>
               )}
-            </Button>
+              <Button
+                className="gap-2 bg-[#166534] hover:bg-[#14532D]"
+                onClick={handleSubmit}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Submitting…
+                  </>
+                ) : (
+                  <>
+                    <FilePlus className="h-4 w-4" />
+                    Submit Case
+                  </>
+                )}
+              </Button>
+            </div>
           )}
         </div>
       </div>

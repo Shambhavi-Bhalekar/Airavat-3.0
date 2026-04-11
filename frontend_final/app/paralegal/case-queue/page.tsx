@@ -1,13 +1,14 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { AppHeader } from "@/components/app-header"
 import { CaseCard } from "@/components/case-card"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { mockCases } from "@/lib/mock-data"
+import { fetchCases } from "@/lib/api"
+import type { Case, CaseStatus } from "@/lib/types"
 import {
   Search,
   Filter,
@@ -22,55 +23,19 @@ import {
   SlidersHorizontal,
   ChevronDown,
   RefreshCw,
+  Loader2,
+  WifiOff,
 } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
-import type { CaseStatus } from "@/lib/types"
 
 type SortKey = "priority" | "date" | "detention" | "name"
 type ViewMode = "grid" | "list"
-
-const filterTabs = [
-  { key: "all", label: "All Cases", icon: Scale, count: mockCases.length },
-  {
-    key: "eligible_now",
-    label: "Eligible",
-    icon: CheckCircle2,
-    count: mockCases.filter(c => c.eligibility.status === "eligible_now").length,
-    color: "text-[#166534]",
-    bg: "bg-[#166534]/10",
-  },
-  {
-    key: "window_closing",
-    label: "Window Closing",
-    icon: Clock,
-    count: mockCases.filter(c => c.eligibility.status === "window_closing").length,
-    color: "text-[#B45309]",
-    bg: "bg-[#B45309]/10",
-  },
-  {
-    key: "lawyer_review_required",
-    label: "Lawyer Review",
-    icon: AlertTriangle,
-    count: mockCases.filter(c => c.eligibility.status === "lawyer_review_required" || c.eligibility.requiresLawyerReview).length,
-    color: "text-[#1B3A6B]",
-    bg: "bg-[#1B3A6B]/10",
-  },
-  {
-    key: "identity_mismatch",
-    label: "Identity Issues",
-    icon: XCircle,
-    count: mockCases.filter(c => c.eligibility.status === "identity_mismatch").length,
-    color: "text-[#B91C1C]",
-    bg: "bg-[#B91C1C]/10",
-  },
-]
 
 const sortOptions: { key: SortKey; label: string }[] = [
   { key: "priority", label: "Priority Score" },
@@ -81,6 +46,9 @@ const sortOptions: { key: SortKey; label: string }[] = [
 
 export default function CaseQueuePage() {
   const router = useRouter()
+  const [cases, setCases] = useState<Case[]>([])
+  const [loading, setLoading] = useState(true)
+  const [apiError, setApiError] = useState<string | null>(null)
   const [activeFilter, setActiveFilter] = useState("all")
   const [sortBy, setSortBy] = useState<SortKey>("priority")
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
@@ -89,10 +57,65 @@ export default function CaseQueuePage() {
   const [filterFirstTime, setFilterFirstTime] = useState<string>("all")
   const [filterDocuments, setFilterDocuments] = useState<string>("all")
 
+  const loadCases = () => {
+    setLoading(true)
+    fetchCases()
+      .then(data => {
+        setCases(data)
+        setApiError(null)
+      })
+      .catch(err => {
+        console.error("API error:", err)
+        setApiError("Backend unavailable — showing mock data")
+        import("@/lib/mock-data").then(m => setCases(m.mockCases))
+      })
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { loadCases() }, [])
+
+  // Build filter tabs dynamically from live data
+  const filterTabs = useMemo(() => [
+    { key: "all", label: "All Cases", icon: Scale, count: cases.length },
+    {
+      key: "eligible_now",
+      label: "Eligible",
+      icon: CheckCircle2,
+      count: cases.filter(c => c.eligibility.status === "eligible_now").length,
+      color: "text-[#166534]",
+      bg: "bg-[#166534]/10",
+    },
+    {
+      key: "window_closing",
+      label: "Window Closing",
+      icon: Clock,
+      count: cases.filter(c => c.eligibility.status === "window_closing").length,
+      color: "text-[#B45309]",
+      bg: "bg-[#B45309]/10",
+    },
+    {
+      key: "lawyer_review_required",
+      label: "Lawyer Review",
+      icon: AlertTriangle,
+      count: cases.filter(c =>
+        c.eligibility.status === "lawyer_review_required" || c.eligibility.requiresLawyerReview
+      ).length,
+      color: "text-[#1B3A6B]",
+      bg: "bg-[#1B3A6B]/10",
+    },
+    {
+      key: "identity_mismatch",
+      label: "Identity Issues",
+      icon: XCircle,
+      count: cases.filter(c => c.eligibility.status === "identity_mismatch").length,
+      color: "text-[#B91C1C]",
+      bg: "bg-[#B91C1C]/10",
+    },
+  ], [cases])
+
   const filtered = useMemo(() => {
-    return mockCases
+    return cases
       .filter(c => {
-        // Status filter
         if (activeFilter !== "all") {
           if (activeFilter === "lawyer_review_required") {
             if (!c.eligibility.requiresLawyerReview && c.eligibility.status !== "lawyer_review_required") return false
@@ -100,15 +123,15 @@ export default function CaseQueuePage() {
             if (c.eligibility.status !== activeFilter) return false
           }
         }
-        // Search filter
         if (search) {
           const q = search.toLowerCase()
-          if (!c.prisonerName.toLowerCase().includes(q) &&
-              !c.caseNumber.toLowerCase().includes(q) &&
-              !c.prison.toLowerCase().includes(q) &&
-              !c.district.toLowerCase().includes(q)) return false
+          if (
+            !c.prisonerName.toLowerCase().includes(q) &&
+            !c.caseNumber.toLowerCase().includes(q) &&
+            !c.prison.toLowerCase().includes(q) &&
+            !c.district.toLowerCase().includes(q)
+          ) return false
         }
-        // Additional filters
         if (filterFirstTime === "yes" && !c.isFirstTimeOffender) return false
         if (filterFirstTime === "no" && c.isFirstTimeOffender) return false
         if (filterDocuments === "ready" && !c.documentsPresent) return false
@@ -121,24 +144,32 @@ export default function CaseQueuePage() {
         if (sortBy === "name") return a.prisonerName.localeCompare(b.prisonerName)
         return new Date(b.lastActionDate).getTime() - new Date(a.lastActionDate).getTime()
       })
-  }, [activeFilter, sortBy, search, filterFirstTime, filterDocuments])
+  }, [cases, activeFilter, sortBy, search, filterFirstTime, filterDocuments])
 
   return (
     <div className="flex flex-col min-h-screen bg-[#F5F3EE]">
       <AppHeader
         title="Case Queue"
-        subtitle={`${filtered.length} cases • Sorted by ${sortOptions.find(s => s.key === sortBy)?.label}`}
-        syncStatus="online"
-        lastSync="2 min ago"
+        subtitle={loading ? "Loading…" : `${filtered.length} cases • Sorted by ${sortOptions.find(s => s.key === sortBy)?.label}`}
+        syncStatus={apiError ? "offline" : "online"}
+        lastSync={loading ? "Loading…" : apiError ? "Offline" : "Live"}
       />
 
-      <div className="flex-1 p-6 space-y-5">
+      <div className="flex-1 p-4 sm:p-6 space-y-4 sm:space-y-5">
+        {/* API error banner */}
+        {apiError && (
+          <div className="flex items-center gap-3 rounded-lg border border-[#B45309]/30 bg-[#B45309]/5 px-4 py-3 text-sm text-[#B45309]">
+            <WifiOff className="h-4 w-4 shrink-0" />
+            {apiError}
+          </div>
+        )}
+
         {/* Search & Controls Bar */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[200px]">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative flex-1 min-w-[160px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#5A6A7A]" />
             <Input
-              placeholder="Search by name, case no., prison, district..."
+              placeholder="Search by name, case no., prison, district…"
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="pl-9 bg-white border-[#D4D0C5] focus:border-[#1B3A6B]"
@@ -197,9 +228,15 @@ export default function CaseQueuePage() {
               <List className="h-4 w-4" />
             </button>
           </div>
-          <Button variant="ghost" size="sm" className="text-[#1B3A6B] hover:bg-[#E8E5DC] gap-1.5">
-            <RefreshCw className="h-3.5 w-3.5" />
-            Sync
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-[#1B3A6B] hover:bg-[#E8E5DC] gap-1.5"
+            onClick={loadCases}
+            disabled={loading}
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+            {loading ? "Syncing…" : "Sync"}
           </Button>
         </div>
 
@@ -264,8 +301,8 @@ export default function CaseQueuePage() {
                 {tab.label}
                 <span className={cn(
                   "rounded-full px-1.5 py-0.5 text-xs",
-                  isActive ? "bg-white/20" : (tab.bg || "bg-[#E8E5DC]"),
-                  isActive ? "text-white" : (tab.color || "text-[#1B3A6B]")
+                  isActive ? "bg-white/20" : ((tab as { bg?: string }).bg || "bg-[#E8E5DC]"),
+                  isActive ? "text-white" : ((tab as { color?: string }).color || "text-[#1B3A6B]")
                 )}>
                   {tab.count}
                 </span>
@@ -275,7 +312,12 @@ export default function CaseQueuePage() {
         </div>
 
         {/* Results */}
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-[#5A6A7A]">
+            <Loader2 className="h-8 w-8 animate-spin text-[#1B3A6B]" />
+            <p className="text-sm">Loading cases from backend…</p>
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <Scale className="h-12 w-12 text-[#D4D0C5] mb-4" />
             <p className="text-[#1B3A6B] font-medium">No cases match your filters</p>
@@ -290,7 +332,7 @@ export default function CaseQueuePage() {
             </Button>
           </div>
         ) : viewMode === "grid" ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {filtered.map(c => (
               <CaseCard
                 key={c.id}
@@ -327,7 +369,8 @@ export default function CaseQueuePage() {
         )}
 
         <p className="text-center text-xs text-[#5A6A7A]">
-          Showing {filtered.length} of {mockCases.length} cases
+          Showing {filtered.length} of {cases.length} cases
+          {!apiError && !loading && <span className="ml-2 text-[#166534]">● Live data</span>}
         </p>
       </div>
     </div>

@@ -2,12 +2,13 @@
 
 ## 🚀 Overview
 
-**JusticeGrid** is an intelligent legal platform designed to empower paralegals and legal aid systems in managing undertrial cases efficiently. It integrates multi-source legal data, computes bail eligibility, prioritizes cases using **local Gemma-4 LLM**, translates updates in native languages via **Groq**, and sends real-time notifications via **Twilio WhatsApp/SMS**.
+**JusticeGrid** is an intelligent full-stack legal platform designed to empower paralegals and legal aid systems in managing undertrial cases efficiently. It integrates multi-source legal data, computes bail eligibility, prioritizes cases using a **local Gemma-4 LLM**, translates updates in native languages via **Groq**, and sends real-time notifications via **Twilio WhatsApp/SMS**.
 
 The system combines:
+- **Next.js 16 Frontend** — role-based paralegal & coordinator dashboards with live API data
 - **Data fusion** from IPC/BNS datasets
 - **Local-first AI** (privacy-preserving reasoning via Gemma-4)
-- **Intelligent prioritization** with explainable scoring (0-200)
+- **Intelligent prioritization** with explainable scoring (0–200)
 - **Multi-language support** for family notifications
 - **Real-time WhatsApp/SMS notifications** via webhooks
 - **Secure cloud database** (Supabase)
@@ -17,20 +18,30 @@ The system combines:
 ## 🧠 Architecture
 
 ```text
-Frontend (Paralegal Dashboard)
-        ↓
-FastAPI Backend (Pydantic Validation)
-        ↓
-    ┌───┴───────────────────────────────────┐
-    ↓                                       ↓
-Supabase (Cloud DB)              Local Gemma-4 (Port 8001)
-    ↓                                      
-Webhook Listener                           
-    ↓                                       
-┌─────┴─────────────────────────┐         
-↓                               ↓           
-Groq LLM (Translate)    Twilio (WhatsApp/SMS)
-(Multi-language)        (Notifications)
+┌─────────────────────────────────────────────────────────┐
+│            Next.js 16 Frontend (Port 3000)              │
+│  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐  │
+│  │  Paralegal  │  │  Case Queue  │  │  Coordinator  │  │
+│  │  Dashboard  │  │  & Detail    │  │  Dashboard    │  │
+│  └──────┬──────┘  └──────┬───────┘  └───────┬───────┘  │
+│         └────────────────┴──────────────────┘           │
+│                     lib/api.ts                          │
+└─────────────────────────┬───────────────────────────────┘
+                          │ HTTP (CORS enabled)
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│           FastAPI Backend (Port 8000)                   │
+│         [Pydantic Validation + CORS Middleware]         │
+└─────┬──────────────────────────────────────────┬────────┘
+      │                                          │
+      ▼                                          ▼
+Supabase (Cloud DB)                  Local Gemma-4 (Port 8001)
+      │                              [llama.cpp inference server]
+      ▼
+Supabase Webhook
+      │
+      ├──► Groq LLM (Translate → native language)
+      └──► Twilio (WhatsApp / SMS Notifications)
 ```
 
 ---
@@ -40,43 +51,77 @@ Groq LLM (Translate)    Twilio (WhatsApp/SMS)
 ```text
 /
 ├── backend/
-│   ├── main.py              # FastAPI routes & core endpoints
+│   ├── main.py              # FastAPI routes & CORS middleware
 │   ├── db.py                # Supabase client initialization
 │   ├── ml_models.py         # Local Gemma-4 integration (OpenAI SDK)
-│   ├── models.py            # Pydantic data schemas (Client, Case)
-│   ├── utils.py             # Helper functions (detention, prompts, translations, notifications)
+│   ├── models.py            # Pydantic schemas (ClientCreate, CaseCreate)
+│   ├── utils.py             # Detention calculator, prompt formatter, translator, notifier
 │   └── datasets/
-│       ├── CLEANED_BNS_DATASET.csv   # BNS legal reference data
-│       └── FIR_DATASET.csv           # FIR case data
+│       ├── CLEANED_BNS_DATASET.csv
+│       └── FIR_DATASET.csv
+│
+├── frontend_final/          # Next.js 16 frontend
+│   ├── app/
+│   │   ├── layout.tsx            # Root layout (fonts, metadata, hydration fix)
+│   │   ├── page.tsx              # Landing page / role selector
+│   │   ├── login/                # Login page
+│   │   ├── paralegal/
+│   │   │   ├── page.tsx          # Paralegal dashboard (live stats + case grid)
+│   │   │   ├── case-queue/       # Full case queue (search, filter, sort, list/grid toggle)
+│   │   │   ├── case-entry/       # Multi-step new case registration form
+│   │   │   └── alerts/           # System alerts view
+│   │   ├── case/[id]/            # Case detail page (eligibility, charges, notes)
+│   │   └── coordinator/          # UTRC Coordinator dashboard
+│   ├── components/               # Reusable UI components
+│   │   ├── case-card.tsx
+│   │   ├── eligibility-card.tsx
+│   │   ├── stats-card.tsx
+│   │   ├── status-badge.tsx
+│   │   ├── confidence-badge.tsx
+│   │   ├── reasoning-chain.tsx
+│   │   ├── hearing-card.tsx
+│   │   ├── surety-card.tsx
+│   │   └── app-header.tsx / app-sidebar.tsx
+│   ├── lib/
+│   │   ├── api.ts           # ⭐ API client + backend↔frontend adapter
+│   │   ├── types.ts         # TypeScript types (Case, EligibilityAssessment, etc.)
+│   │   ├── mock-data.ts     # Offline fallback data
+│   │   └── utils.ts         # cn() and helpers
+│   └── public/              # Static assets & icons
+│
 ├── llama.cpp/               # Compiled local inference engine
 ├── unsloth/                 # Gemma-4-E4B model weights (quantized)
 ├── setup_gemma.sh           # Automation script (Linux/Mac)
 ├── requirements.txt         # Python dependencies
 ├── .env                     # Environment variables (NOT in repo)
-└── Readme.md               # This file
+└── Readme.md                # This file
 ```
 
 ---
 
 ## 🧩 Features
 
-* ✅ **Client & Case Management**: Robust CRUD APIs with Pydantic validation.
-* ✅ **Local AI Scoring**: Powered by **Google's Gemma-4-E4B** for privacy and zero inference cost.
-* ✅ **Bail Eligibility Detection**: Automatic classification based on `bailable` status in case data.
-* ✅ **Intelligent Priority Scoring**: Ranking system (0-200) based on:
-  - Bail eligibility
-  - Detention duration
-  - Offense severity (max_sentence)
-  - LLM contextual reasoning
-* ✅ **Multi-Language Support**: Real-time translation to family's native tongue using **Groq LLM**.
-* ✅ **Real-Time Notifications**:
-  - WhatsApp messages via **Twilio**
-  - SMS fallback support
-  - Triggered on case creation and updates via Supabase webhooks
-* ✅ **Secure Database**: Cloud-hosted **Supabase** with environment-based authentication.
-* ✅ **Explainable AI**: Every score includes LLM-generated reasoning and confidence metrics.
-* ✅ **Retroactive Analysis**: `/predict-all` endpoint to re-score all cases with updated LLM configuration.
-* ✅ **Webhook Integration**: Supabase event-driven notifications pipeline.
+### Backend
+* ✅ **Client & Case Management**: Robust CRUD APIs with Pydantic validation
+* ✅ **Local AI Scoring**: Powered by **Google's Gemma-4-E4B** for privacy and zero inference cost
+* ✅ **Bail Eligibility Detection**: Automatic classification based on `bailable` status
+* ✅ **Intelligent Priority Scoring**: 0–200 ranking based on detention duration, offense severity, and LLM reasoning
+* ✅ **Multi-Language Support**: Real-time translation to family's native tongue via **Groq LLM**
+* ✅ **Real-Time Notifications**: WhatsApp + SMS via **Twilio**, triggered by Supabase webhooks
+* ✅ **Explainable AI**: Every score includes LLM-generated reasoning and confidence metrics
+* ✅ **Retroactive Re-scoring**: `/predict-all` endpoint re-scores all cases with updated LLM config
+* ✅ **CORS Enabled**: Frontend on port 3000 can communicate freely with the backend on port 8000
+
+### Frontend
+* ✅ **Live Data Integration**: All pages fetch real data from the FastAPI backend via `lib/api.ts`
+* ✅ **Graceful Offline Fallback**: Every page falls back to mock data if the backend is unreachable
+* ✅ **Paralegal Dashboard**: Live stats (eligible cases, window closing, lawyer review count) derived from real data
+* ✅ **Case Queue**: Full-featured list with search, multi-status filter tabs, sort-by (priority / detention / date / name), and grid/list view toggle
+* ✅ **Case Detail Page**: Full eligibility assessment, charge breakdown, AI reasoning chain, and paralegal notes (saved to backend via `PUT /case/{id}`)
+* ✅ **Multi-Step Case Entry Form**: Submits to `POST /client` + `POST /case`, maps form fields to backend schema, and shows the real Supabase case ID on success
+* ✅ **Coordinator Dashboard**: Top-4 stat cards derived from live cases; **Re-score All Cases** button triggers `POST /predict-all` against Gemma-4
+* ✅ **Loading States**: Spinner on every data-fetching page
+* ✅ **Error Banners**: Offline warning banner shown when backend is unreachable
 
 ---
 
@@ -87,14 +132,14 @@ Priority scores range from 0 to 200:
 | Level | Score Range | Meaning | Action |
 |-------|------------|---------|--------|
 | 🔴 **HIGH** | > 180 | Urgent case requiring immediate paralegal attention | Paralegal assigned immediately |
-| 🟡 **MEDIUM** | 121-180 | Moderate urgency with active legal review | Standard case processing |
+| 🟡 **MEDIUM** | 121–180 | Moderate urgency with active legal review | Standard case processing |
 | 🟢 **LOW** | ≤ 120 | Lower urgency cases in queue | Monitoring for developments |
 
 ---
 
-## 🔐 Environment Variables Required
+## 🔐 Environment Variables
 
-Create a `.env` file in the project root with:
+Create a `.env` file in the **project root** with:
 
 ```env
 # Supabase Configuration
@@ -111,93 +156,75 @@ TWILIO_SMS_FROM=+1234567890                 # Your Twilio Phone Number
 GROQ_API_KEY=your-groq-api-key
 ```
 
+The frontend reads one optional variable (defaults to `http://localhost:8000` if not set):
+```env
+# In frontend_final/.env.local (optional)
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
 ---
 
 ## 🛠️ Getting Started
 
 ### Prerequisites
 
-* **Python** 3.10+ ([Download](https://www.python.org/downloads/))
-* **Git** ([Download](https://git-scm.com/))
-* **macOS/Linux or Windows** (with PowerShell for Windows)
-* **GPU-accelerated inference recommended** (optional, CPU-only works too)
+* **Python** 3.10+
+* **Node.js** 18+ and **npm**
+* **Git**
+* **macOS/Linux** (Windows via WSL2 recommended)
+* GPU-accelerated inference recommended (CPU-only works too)
 
 ---
 
 ### Installation
 
-#### **Step 1: Clone & Setup Virtual Environment**
+#### Step 1: Clone the Repository
 
-##### **macOS / Linux**
 ```bash
 git clone https://github.com/your-repo/JusticeGrid.git
 cd JusticeGrid
+```
 
-# Create virtual environment
+#### Step 2: Setup Backend
+
+```bash
+# Create & activate virtual environment
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate   # Windows: .\venv\Scripts\Activate.ps1
 
-# Install dependencies
+# Install Python dependencies
 pip install -r requirements.txt
 
-# Run Local AI Setup (builds llama.cpp and downloads ~6GB model)
+# Build llama.cpp and download Gemma-4 model (~6 GB)
 sh setup_gemma.sh
 ```
 
-##### **Windows (PowerShell)**
-```powershell
-git clone https://github.com/your-repo/JusticeGrid.git
-cd JusticeGrid
+#### Step 3: Setup Frontend
 
-# Create virtual environment
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Download and setup Gemma-4 model manually (or adapt setup_gemma.sh to PowerShell)
-# For Windows, use WSL2 with the bash script, or manually download:
-# 1. Download llama.cpp pre-built binaries from https://github.com/ggerganov/llama.cpp/releases
-# 2. Download Gemma-4-E4B-it-Q8_0.gguf from Hugging Face https://huggingface.co/unsloth/Gemma-4-E4B-it-GGUF
-# 3. Place binaries in ./llama.cpp/ and model in ./unsloth/
+```bash
+cd frontend_final
+npm install
 ```
 
----
+#### Step 4: Configure Environment
 
-#### **Step 2: Configure Environment**
+Create `.env` in the **project root** (see variables above).
 
-Create a `.env` file in the project root:
-
+Optionally create `frontend_final/.env.local` if your backend runs on a different port:
 ```env
-# Supabase Configuration
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-secret-key
-
-# Twilio Configuration
-TWILIO_ACCOUNT_SID=your-twilio-account-sid
-TWILIO_AUTH_TOKEN=your-twilio-auth-token
-TWILIO_WHATSAPP_FROM=whatsapp:+14155552671
-TWILIO_SMS_FROM=+1234567890
-
-# Groq Configuration
-GROQ_API_KEY=your-groq-api-key
+NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
-
-**Note:** Keep `.env` out of version control. Add it to `.gitignore`.
 
 ---
 
-## 🚀 Running the System
+## 🚀 Running the Full System
 
-The system requires **two terminal sessions** running simultaneously:
+The full system requires **three terminal sessions** running simultaneously:
 
-### **Terminal 1: Local AI Reasoner (Gemma-4 LLM Server)**
+### Terminal 1 — Local AI Reasoner (Gemma-4 LLM Server)
 
-Starts the Gemma-4 model inference engine on your local machine.
-
-#### **macOS**
 ```bash
+# macOS / Linux
 ./llama.cpp/llama-server \
     --model unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q8_0.gguf \
     --port 8001 \
@@ -205,97 +232,130 @@ Starts the Gemma-4 model inference engine on your local machine.
     -n 2048
 ```
 
-#### **Linux**
-```bash
-./llama.cpp/llama-server \
-    --model unsloth/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q8_0.gguf \
-    --port 8001 \
-    --reasoning on \
-    -n 2048
-```
-
-#### **Windows (PowerShell)**
 ```powershell
+# Windows (PowerShell)
 cd ./llama.cpp
 .\llama-server.exe `
     --model ..\unsloth\gemma-4-E4B-it-GGUF\gemma-4-E4B-it-Q8_0.gguf `
-    --port 8001 `
-    --reasoning on `
-    -n 2048
+    --port 8001 --reasoning on -n 2048
 ```
 
-**Verification:** The server should be running on `http://localhost:8001`
+✅ Running at `http://localhost:8001`
 
 ---
 
-### **Terminal 2: FastAPI Backend**
+### Terminal 2 — FastAPI Backend
 
-Starts the JusticeGrid API server.
-
-#### **macOS / Linux**
 ```bash
+# macOS / Linux
 cd backend
 source ../venv/bin/activate
 uvicorn main:app --reload --port 8000
 ```
 
-#### **Windows (PowerShell)**
 ```powershell
+# Windows
 cd backend
-.\../venv/Scripts/Activate.ps1
+..\venv\Scripts\Activate.ps1
 uvicorn main:app --reload --port 8000
 ```
 
-**API Documentation:** Available at `http://127.0.0.1:8000/docs` (Swagger UI)
+✅ Running at `http://localhost:8000`  
+📖 Swagger UI: `http://localhost:8000/docs`
 
 ---
 
-## � API Endpoints
+### Terminal 3 — Next.js Frontend
 
-### **Clients**
+```bash
+cd frontend_final
+npm run dev
+```
+
+✅ Running at `http://localhost:3000`
+
+---
+
+## 🖥️ Frontend Pages & Routes
+
+| Route | Role | Description |
+|-------|------|-------------|
+| `/` | Both | Landing page — role selector |
+| `/login` | Both | Login screen |
+| `/paralegal` | Paralegal | Dashboard with live stats and top case cards |
+| `/paralegal/case-queue` | Paralegal | Full case list — search, filter, sort, list/grid toggle |
+| `/paralegal/case-entry` | Paralegal | Multi-step form to register a new case |
+| `/paralegal/alerts` | Paralegal | System alerts and notifications |
+| `/case/[id]` | Paralegal | Case detail — eligibility, charges, reasoning, notes |
+| `/coordinator` | Coordinator | District-wide stats + Re-score All (Gemma-4) |
+
+---
+
+## 🔌 Frontend API Layer (`lib/api.ts`)
+
+All backend communication goes through `frontend_final/lib/api.ts`:
+
+| Function | Method | Endpoint | Purpose |
+|----------|--------|----------|---------|
+| `fetchCases()` | GET | `/cases` | Fetch all cases, returns adapted `Case[]` |
+| `createClient()` | POST | `/client` | Register a new client |
+| `createCase()` | POST | `/case` | Submit a case (triggers AI scoring) |
+| `updateCase(id, data)` | PUT | `/case/{id}` | Update case fields |
+| `deleteCase(id)` | DELETE | `/case/{id}` | Delete a case |
+| `predictAll()` | POST | `/predict-all` | Re-score all cases with Gemma-4 |
+| `adaptBackendCase()` | — | — | Adapter: maps backend snake_case → frontend `Case` type |
+
+The **adapter function** (`adaptBackendCase`) handles the field-name differences between the backend (e.g., `priority_score`, `assigned_ipc`, `confidence`) and the frontend's rich `Case` TypeScript type, so all existing UI components continue to work without modification.
+
+---
+
+## 📡 API Endpoints
+
+### Clients
 
 | Method | Endpoint | Description | Request Body |
 |--------|----------|-------------|--------------|
 | POST | `/client` | Create a new client | `{client_id, mother_tongue, family_contact_number}` |
-| GET | `/client/{client_id}` | Get client by ID | - |
+| GET | `/client/{client_id}` | Get client by ID | — |
 
-### **Cases** (Core Functionality)
+### Cases
 
 | Method | Endpoint | Description | Request Body |
 |--------|----------|-------------|--------------|
-| POST | `/case` | Create case & trigger AI scoring | `{client_id, report_details, city, ipc_section, bailable, cognizable, max_sentence, date_of_occurrence}` |
-| GET | `/cases` | Get all cases (sorted by priority) | - |
-| PUT | `/case/{id}` | Update case details | `{field_name: value}` |
-| DELETE | `/case/{id}` | Delete case | - |
+| POST | `/case` | Create case & trigger AI scoring | `{client_id, city, crime_description, assigned_ipc, bailable, cognizable, max_sentence, date_of_occurrence, ...}` |
+| GET | `/cases` | Get all cases sorted by priority | — |
+| PUT | `/case/{id}` | Update case fields | `{field: value, ...}` |
+| DELETE | `/case/{id}` | Delete case | — |
 
-### **Admin/Batch Operations**
+### Admin / Batch
 
-| Method | Endpoint | Description | Purpose |
-|--------|----------|-------------|---------|
-| POST | `/predict-all` | Retroactively score all cases | Re-runs Gemma-4 on entire database (useful after LLM updates) |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/predict-all` | Re-run Gemma-4 scoring on all cases in the database |
 
-### **Webhooks**
+### Webhooks
 
-| Method | Endpoint | Description | Triggered By |
-|--------|----------|-------------|--------------|
-| POST | `/supabase-webhook` | Handles case updates & sends notifications | Supabase INSERT/UPDATE events |
+| Method | Endpoint | Triggered By |
+|--------|----------|--------------|
+| POST | `/supabase-webhook` | Supabase INSERT/UPDATE events → translates & notifies family |
 
 ---
 
 ## 🧠 Case Analysis Pipeline
 
-When you create a case via `POST /case`, JusticeGrid automatically:
+When a case is created via `POST /case`, JusticeGrid automatically:
 
-1. **Calculates Detention Days**: From `date_of_occurrence` to today
-2. **Formats LLM Prompt**: Structures case data for Gemma-4
-3. **Calls Local Gemma-4**: Gets AI-powered scoring and reasoning
-4. **Stores in Supabase**: Persists case with computed scores
-5. **Triggers Webhook** (if configured): Sends translated notification to family
+1. **Calculates Detention Days** — from `date_of_occurrence` to today
+2. **Formats LLM Prompt** — structures case data for Gemma-4
+3. **Calls Local Gemma-4** — gets AI-scored `priority_score`, `priority_level`, `adjournment_prob`, `confidence`, `reasoning`, and `conflict_flag`
+4. **Stores in Supabase** — persists case with computed scores
+5. **Triggers Webhook** (if configured) — sends translated notification to family via Twilio
 
-### Example Response:
+### Example Response
+
 ```json
 {
-  "case": {
+  "case": [{
     "id": "uuid-1234",
     "client_id": "CL-001",
     "priority_score": 165,
@@ -303,15 +363,14 @@ When you create a case via `POST /case`, JusticeGrid automatically:
     "detention_days": 45,
     "eligible": true,
     "confidence": 0.89,
-    "reasoning": "Bailable offense with moderate detention duration and serious IPC section warrant medium-high priority."
-  },
+    "reason": "Bailable offense with moderate detention and serious IPC section warrant medium-high priority."
+  }],
   "computed": {
     "priority_score": 165,
     "priority_level": "MEDIUM",
     "adjournment_prob": 65,
-    "conflict_flag": "SERIOUS_OFFENCE",
-    "confidence": 0.89,
-    "reasoning": "..."
+    "conflict_flag": null,
+    "confidence": 0.89
   }
 }
 ```
@@ -322,84 +381,91 @@ When you create a case via `POST /case`, JusticeGrid automatically:
 
 When a case is created/updated, the system:
 1. **Retrieves client's native language** (`mother_tongue`)
-2. **Generates English baseline** message
-3. **Calls Groq LLM** to translate to native language
+2. **Generates a safe English baseline** message (no legal jargon, no AI scores)
+3. **Calls Groq LLM** to translate to native language at 5th-grade reading level
 4. **Sends via Twilio WhatsApp** (primary) or SMS (fallback)
 
-**Supported Languages:** Any language Groq supports (Hindi, Tamil, Telugu, Marathi, Gujarati, Kannada, etc.)
+**Supported Languages:** Any language Groq supports — Hindi, Tamil, Telugu, Marathi, Gujarati, Kannada, Bengali, and more.
 
 ---
 
-## 🔧 Backend Components Deep Dive
+## 🔧 Component Deep Dive
 
-### **main.py** - FastAPI Routes
-- Core CRUD endpoints for clients and cases
-- Webhook listener for Supabase events
-- Integrated ML scoring on case creation
-- `/predict-all` for batch re-scoring
+### Backend
 
-### **db.py** - Database Connection
-- Supabase client initialization
-- Environment-based configuration
-- Graceful handling of missing credentials
+| File | Purpose |
+|------|---------|
+| `main.py` | FastAPI routes, CORS middleware, case scoring pipeline |
+| `db.py` | Supabase client init |
+| `ml_models.py` | OpenAI SDK wrapper for local llama.cpp; fallback mock scoring |
+| `models.py` | Pydantic `ClientCreate` and `CaseCreate` schemas |
+| `utils.py` | Detention calculator, Gemma-4 prompt formatter, Groq translator, Twilio notifier |
 
-### **ml_models.py** - Local LLM Integration
-- OpenAI SDK wrapper pointing to local llama.cpp server
-- JSON parsing of Gemma-4 responses
-- Fallback mock scoring if LLM unavailable
+### Frontend
 
-### **models.py** - Data Validation
-- Pydantic schemas for ClientCreate and CaseCreate
-- Enforces data types and validation rules
-- Supports optional fields for ML outputs
-
-### **utils.py** - Helper Functions
-- **Detention Calculator**: Days since occurrence date
-- **Prompt Formatter**: Structures case data for Gemma-4
-- **Translator**: Groq-powered multi-language translation
-- **Notification Sender**: Twilio WhatsApp/SMS integration
+| File | Purpose |
+|------|---------|
+| `lib/api.ts` | Central API client — all `fetch()` calls + `adaptBackendCase()` adapter |
+| `lib/types.ts` | TypeScript types (`Case`, `EligibilityAssessment`, `ChargeSection`, etc.) |
+| `lib/mock-data.ts` | Static fallback data used when backend is offline |
+| `app/paralegal/page.tsx` | Dashboard — live stats, top alerts, case grid |
+| `app/paralegal/case-queue/page.tsx` | Full queue with advanced search/filter/sort |
+| `app/paralegal/case-entry/page.tsx` | Multi-step new case registration form |
+| `app/case/[id]/page.tsx` | Case detail view + paralegal notes |
+| `app/coordinator/page.tsx` | District-level overview + Re-score All trigger |
+| `components/` | Shared components: `CaseCard`, `EligibilityCard`, `StatusBadge`, etc. |
 
 ---
 
 ## 🔍 Troubleshooting
 
-### Common Issues
-
 | Issue | Solution |
 |-------|----------|
-| `Connection refused on port 8001` | Ensure Gemma-4 server is running in Terminal 1 |
-| `SUPABASE_URL is missing` | Check `.env` file exists and `SUPABASE_URL` is set |
-| `Twilio Auth Error` | Verify `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` in `.env` |
-| `Groq API Error` | Check `GROQ_API_KEY` and verify account credits |
-| `Port 8000 already in use` | Change with `--port 9000` or kill the process: `lsof -i :8000` (Mac/Linux) or `netstat -ano \| findstr :8000` (Windows) |
+| `Connection refused on port 8001` | Start the Gemma-4 llama-server in Terminal 1 |
+| `SUPABASE_URL is missing` | Check `.env` file exists and variables are set correctly |
+| `Twilio Auth Error` | Verify `TWILIO_ACCOUNT_SID` and `TWILIO_AUTH_TOKEN` |
+| `Groq API Error` | Check `GROQ_API_KEY` and account credits |
+| `Port 8000 already in use` | `lsof -i :8000` then `kill -9 <PID>` (Mac/Linux) |
+| `Port 3000 already in use` | `lsof -i :3000` then `kill -9 <PID>` (Mac/Linux) |
+| Frontend shows "Backend unavailable" | Ensure backend is running on port 8000 and CORS is not blocked |
+| Hydration mismatch warning | Already fixed — `suppressHydrationWarning` on the root `<html>` tag handles browser extension interference (e.g., Grammarly) |
+| `404 on /paralegal/lawyer-review` | This route is not yet implemented; navigation will be added in a future update |
 
 ---
 
 ## 📦 Dependencies
 
-Key Python packages installed via `requirements.txt`:
+### Backend (`requirements.txt`)
 
 ```
-fastapi==0.109.0          # Web framework
-uvicorn==0.27.0           # ASGI server
-pydantic==2.5.3           # Data validation
-supabase==2.4.1           # Database client
-openai==1.3.5             # LLM SDK (for llama.cpp compatibility)
-groq==0.4.2               # Groq API for translations
-twilio==9.0.0             # WhatsApp/SMS notifications
-python-dotenv==1.0.0      # Environment variable management
+fastapi          # Web framework
+uvicorn          # ASGI server
+pydantic         # Data validation
+supabase         # Database client
+openai           # LLM SDK (for llama.cpp OpenAI-compatible server)
+groq             # Groq API for multi-language translations
+twilio           # WhatsApp / SMS notifications
+python-dotenv    # Environment variable management
 ```
 
-Install with:
-```bash
-pip install -r requirements.txt
+### Frontend (`frontend_final/package.json`)
+
+```
+next@16            # React framework (App Router)
+react@19           # UI library
+typescript         # Type safety
+tailwindcss        # Utility-first CSS
+shadcn/ui          # Component library (Button, Card, Tabs, etc.)
+lucide-react       # Icon set
+@vercel/analytics  # Production analytics
 ```
 
 ---
 
 ## 👨‍💻 Team
 
-* **Backend & AI Architecture**: Managed by JusticeGrid AI Team
+* **Backend & AI Architecture**: JusticeGrid AI Team
+* **Frontend & Integration**: JusticeGrid AI Team
 * **Lead Developer**: Mayank Chauhan
 
 ---

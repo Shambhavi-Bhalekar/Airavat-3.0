@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Body
+from fastapi.middleware.cors import CORSMiddleware
 from db import supabase
 from ml_models import compute_score
 from models import ClientCreate, CaseCreate
@@ -6,6 +7,15 @@ from utils import calculate_detention_days, format_gemma_prompt, generate_transl
 import traceback
 
 app = FastAPI(title="JusticeGrid API")
+
+# Allow requests from the Next.js frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.post("/client")
 def create_client(client: ClientCreate):
@@ -74,7 +84,7 @@ def get_cases():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/case/{id}")
-def update_case(id: str, updates: dict):
+def update_case(id: str, updates: dict = Body(...)):
     try:
         res = supabase.table("cases").update(updates).eq("id", id).execute()
         return res.data
