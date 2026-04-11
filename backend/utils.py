@@ -2,9 +2,15 @@ from datetime import datetime
 from typing import Optional
 import os
 import uuid
+from dotenv import load_dotenv
 from groq import Groq
 from twilio.rest import Client
 from gtts import gTTS
+
+backend_env_path = os.path.join(os.path.dirname(__file__), ".env")
+root_env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+load_dotenv(backend_env_path)
+load_dotenv(root_env_path)
 
 # Twilio Setup (Get these from your Twilio Console)
 TWILIO_SID = os.getenv("TWILIO_ACCOUNT_SID")
@@ -12,10 +18,11 @@ TWILIO_AUTH = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_WHATSAPP_FROM = os.getenv("TWILIO_WHATSAPP_FROM") # Default Twilio Sandbox Number
 TWILIO_SMS_FROM = os.getenv("TWILIO_SMS_FROM") # Your Twilio Phone Number
 
-twilio_client = Client(TWILIO_SID, TWILIO_AUTH)
+twilio_client = Client(TWILIO_SID, TWILIO_AUTH) if TWILIO_SID and TWILIO_AUTH else None
 
 # Groq Setup
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+groq_api_key = os.getenv("GROQ_API_KEY")
+groq_client = Groq(api_key=groq_api_key) if groq_api_key else None
 
 audio_lang_codes = {
     "hindi": "hi", "marathi": "mr", "tamil": "ta",
@@ -95,6 +102,8 @@ def generate_translated_message(case_data: dict) -> str:
     RULES: Use a 5th-grade reading level. Be empathetic. NO predictions. NO legal advice.
     Return ONLY the translated text.
     """
+    if groq_client is None:
+        return english_baseline
     try:
         response = groq_client.chat.completions.create(
             messages=[
@@ -124,6 +133,10 @@ def generate_audio_file(translated_text: str, language: str) -> str:
 
 # --- Helper 3: Twilio Sender ---
 def send_whatsapp_voice_note(phone_number: str, text_message: str, audio_url: str = None):
+    if twilio_client is None or not TWILIO_WHATSAPP_FROM:
+        print("Twilio is not configured; skipping WhatsApp notification.")
+        return
+
     # Ensure proper WhatsApp formatting
     if phone_number.startswith("whatsapp:"):
         phone_number = phone_number.replace("whatsapp:", "")

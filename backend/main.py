@@ -1,5 +1,6 @@
 import os
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request, Body, requests
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
@@ -10,6 +11,11 @@ from financial_intelligence import evaluate_surety
 from models import UserSignup, UserLogin, ClientCreate, CaseCreate
 from utils import calculate_detention_days, format_gemma_prompt, generate_audio_file, generate_translated_message, send_whatsapp_voice_note
 import traceback
+
+backend_env_path = os.path.join(os.path.dirname(__file__), ".env")
+root_env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
+load_dotenv(backend_env_path)
+load_dotenv(root_env_path)
 
 app = FastAPI(title="JusticeGrid API")
 
@@ -22,7 +28,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+groq_api_key = os.getenv("GROQ_API_KEY")
+groq_client = Groq(api_key=groq_api_key) if groq_api_key else None
 
 TWILIO_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH = os.getenv("TWILIO_AUTH_TOKEN")

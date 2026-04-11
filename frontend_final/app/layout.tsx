@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import GTranslate from '@/components/gtranslate'
 import './globals.css'
 
 const _inter = Inter({ subsets: ["latin"], variable: '--font-inter', preload: false });
@@ -38,6 +39,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${_inter.variable} ${_geistMono.variable} font-sans antialiased`}>
         {children}
+        <GTranslate />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
