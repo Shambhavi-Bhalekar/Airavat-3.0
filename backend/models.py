@@ -65,3 +65,5 @@ class CaseCreate(BaseModel):
     
     # Special Flags (Optional)
     eligible_but_detained: Optional[bool] = None
+    section_440_flag: Optional[bool] = False
+    section_440_brief: Optional[str] = None
