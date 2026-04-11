@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+supabase
+pydantic
+python-dotenv
+openai
+huggingface_hub[hf_transfer]
