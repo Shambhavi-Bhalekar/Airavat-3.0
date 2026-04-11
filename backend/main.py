@@ -49,7 +49,7 @@ def login(user: UserLogin):
 @app.post("/client")
 def create_client(client: ClientCreate):
     try:
-        response = supabase.table("clients").insert(client.model_dump()).execute()
+        response = supabase.table("clients").insert(client.model_dump(mode='json')).execute()
         return response.data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -67,7 +67,7 @@ def get_client(client_id: str):
 @app.post("/case")
 def create_case(case: CaseCreate):
     try:
-        case_dict = case.model_dump(exclude_unset=True)
+        case_dict = case.model_dump(mode='json', exclude_unset=True)
         
         # 1. Compute detention
         detention_days = calculate_detention_days(case_dict.get("date_of_occurrence"))
@@ -79,9 +79,11 @@ def create_case(case: CaseCreate):
         # 3. Call LLM (Gemma/Gemini)
         ml_result = compute_score(case_dict, prompt)
         
-        # 4. Integrate LLM Model Results
-        case_dict.update(ml_result)
-        
+        # 4. Integrate LLM Model Results securely
+        if "priority_score" in ml_result: case_dict["priority_score"] = ml_result["priority_score"]
+        if "priority_level" in ml_result: case_dict["priority_level"] = ml_result["priority_level"]
+        if "confidence" in ml_result: case_dict["confidence"] = ml_result["confidence"]
+        if "conflict_flag" in ml_result: case_dict["conflict_flag"] = ml_result["conflict_flag"]
         # 4.1. Run Delay Predictor (Joblib ML model)
         delay_result = predict_delay(case_dict)
         case_dict["adjournment_prob"] = int(delay_result["delay_probability"])
@@ -102,7 +104,13 @@ def create_case(case: CaseCreate):
         llm_reason = ml_result.get("reasoning")
         case_dict["reason"] = llm_reason if llm_reason else f"Eligible={case_dict['eligible']}, Detention={detention_days}, Delay Prob={case_dict['adjournment_prob']}%"
 
-        # 5. Insert into DB
+        # 5. Insert into DB (safely ignore derived UI fields not in schema)
+        case_dict.pop("delay_decision", None)
+        case_dict.pop("reasoning", None)
+        case_dict.pop("section_440_brief", None)
+        case_dict.pop("section_440_flag", None)
+        case_dict.pop("bail_delay_days", None)
+        case_dict.pop("surety_blocked", None)
         response = supabase.table("cases").insert(case_dict).execute()
 
         return {
