@@ -1,8 +1,8 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from db import supabase
 from ml_models import compute_score
 from models import ClientCreate, CaseCreate
-from utils import calculate_detention_days, format_gemma_prompt
+from utils import calculate_detention_days, format_gemma_prompt, generate_translated_message, send_notifications
 import traceback
 
 app = FastAPI(title="JusticeGrid API")
@@ -124,3 +124,27 @@ def predict_all_cases():
     except Exception as e:
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+
+# --- The Webhook Endpoint ---
+@app.post("/supabase-webhook")
+async def handle_supabase_update(request: Request):
+    payload = await request.json()
+    
+    # Supabase webhooks send the updated row in the 'record' object
+    # We only want to trigger this on UPDATE or INSERT
+    if payload.get("type") in ["UPDATE", "INSERT"]:
+        case_data = payload.get("record", {})
+        phone_number = case_data.get("family_contact_number")
+        
+        if not phone_number:
+            return {"status": "Ignored", "reason": "No family contact number provided"}
+
+        # Generate the language-specific message
+        final_message = generate_translated_message(case_data)
+        
+        # Fire off the Twilio blasts
+        send_notifications(phone_number, final_message)
+        
+        return {"status": "Success", "message_sent": True}
+        
+    return {"status": "Ignored", "reason": "Not an INSERT or UPDATE"}
