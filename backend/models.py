@@ -2,6 +2,18 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 
+class UserSignup(BaseModel):
+    full_name: str
+    district: str
+    role: str
+    email: str
+    password: str
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+    role: Optional[str] = None
+
 class ClientCreate(BaseModel):
     client_id: str
     mother_tongue: str
