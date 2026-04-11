@@ -3,8 +3,8 @@ import { Inter, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 
-const _inter = Inter({ subsets: ["latin"], variable: '--font-inter' });
-const _geistMono = Geist_Mono({ subsets: ["latin"], variable: '--font-geist-mono' });
+const _inter = Inter({ subsets: ["latin"], variable: '--font-inter', preload: false });
+const _geistMono = Geist_Mono({ subsets: ["latin"], variable: '--font-geist-mono', preload: false });
 
 export const metadata: Metadata = {
   title: 'JusticeGrid - Undertrial Rights Management System',
