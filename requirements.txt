@@ -8,3 +8,6 @@ huggingface_hub[hf_transfer]
 groq
 twilio
 gtts
+pandas
+scikit-learn
+joblib

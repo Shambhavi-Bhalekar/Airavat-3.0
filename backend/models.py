@@ -45,6 +45,7 @@ class CaseCreate(BaseModel):
     conflict_flag: Optional[str] = None
     reason: Optional[str] = None
     confidence: Optional[float] = None
+    delay_decision: Optional[str] = None
     
     # Hearing Information (Optional)
     hearing_outcome: Optional[str] = None

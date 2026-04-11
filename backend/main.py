@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
 from db import supabase
 from ml_models import compute_score
+from ml_delay import predict_delay
 from models import ClientCreate, CaseCreate
 from utils import calculate_detention_days, format_gemma_prompt, generate_audio_file, generate_translated_message, send_notifications, send_whatsapp_voice_note
 import traceback
@@ -58,8 +59,13 @@ def create_case(case: CaseCreate):
         # 3. Call LLM (Gemma/Gemini)
         ml_result = compute_score(case_dict, prompt)
         
-        # 4. Integrate Model Results
+        # 4. Integrate LLM Model Results
         case_dict.update(ml_result)
+        
+        # 4.1. Run Delay Predictor (Joblib ML model)
+        delay_result = predict_delay(case_dict)
+        case_dict["adjournment_prob"] = int(delay_result["delay_probability"])
+        case_dict["delay_decision"] = delay_result["decision"]
         
         # Add mock status that might be updated later
         if "hearing_outcome" not in case_dict:
@@ -70,7 +76,7 @@ def create_case(case: CaseCreate):
         
         # Reason
         llm_reason = ml_result.get("reasoning")
-        case_dict["reason"] = llm_reason if llm_reason else f"Eligible={case_dict['eligible']}, Detention={detention_days}, LLM Conf={case_dict.get('confidence', 0)}"
+        case_dict["reason"] = llm_reason if llm_reason else f"Eligible={case_dict['eligible']}, Detention={detention_days}, Delay Prob={case_dict['adjournment_prob']}%"
 
         # 5. Insert into DB
         response = supabase.table("cases").insert(case_dict).execute()
@@ -125,10 +131,16 @@ def predict_all_cases():
             
             updates = ml_result
             updates["detention_days"] = detention_days
+            
+            # Predict adjournment using local joblib model
+            delay_result = predict_delay(case)
+            updates["adjournment_prob"] = int(delay_result["delay_probability"])
+            updates["delay_decision"] = delay_result["decision"]
+            
             if "bailable" in case:
                 updates["eligible"] = True if case.get("bailable") == "Bailable" else False
                 llm_reason = ml_result.get("reasoning")
-                updates["reason"] = llm_reason if llm_reason else f"Eligible={updates['eligible']}, Detention={detention_days}, LLM Conf={updates.get('confidence', 0)}"
+                updates["reason"] = llm_reason if llm_reason else f"Eligible={updates['eligible']}, Detention={detention_days}, Delay Prob={updates['adjournment_prob']}%"
 
             # Push back to DB safely - only updating ML fields
             supabase.table("cases").update(updates).eq("id", case["id"]).execute()
