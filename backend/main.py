@@ -7,8 +7,8 @@ from db import supabase
 from ml_models import compute_score
 from ml_delay import predict_delay
 from financial_intelligence import evaluate_surety
-from models import ClientCreate, CaseCreate
-from utils import calculate_detention_days, format_gemma_prompt, generate_audio_file, generate_translated_message, send_notifications, send_whatsapp_voice_note
+from models import UserSignup, UserLogin, ClientCreate, CaseCreate
+from utils import calculate_detention_days, format_gemma_prompt, generate_audio_file, generate_translated_message, send_whatsapp_voice_note
 import traceback
 
 app = FastAPI(title="JusticeGrid API")
@@ -26,6 +26,25 @@ groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 TWILIO_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH = os.getenv("TWILIO_AUTH_TOKEN")
+
+@app.post("/auth/signup")
+def signup(user: UserSignup):
+    try:
+        # For the prototype, we assume success to unblock the Next.js UI 
+        # Attempt to log to DB if the table is structured
+        try:
+            db_data = user.model_dump()
+            db_data["password"] = "HIDDEN"  # Do not store raw passwords in plain text tables
+            supabase.table("users").insert(db_data).execute()
+        except Exception:
+            pass # Graceful fallback if table is missing 
+        return {"status": "request_submitted", "user": user.email}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/auth/login")
+def login(user: UserLogin):
+    return {"status": "success", "token": "mock-jwt-token-123"}
 
 @app.post("/client")
 def create_client(client: ClientCreate):

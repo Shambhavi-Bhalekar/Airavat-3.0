@@ -1,7 +1,7 @@
 "use client"
 
 import { use, useEffect, useState } from "react"
-import { notFound } from "next/navigation"
+import { notFound, useRouter } from "next/navigation"
 import Link from "next/link"
 import { AppHeader } from "@/components/app-header"
 import { AppSidebar } from "@/components/app-sidebar"
@@ -15,10 +15,16 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { fetchCases, updateCase } from "@/lib/api"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { fetchCases, updateCase, deleteCase } from "@/lib/api"
 import type { Case } from "@/lib/types"
 import {
   ArrowLeft,
+  Trash2,
+  Edit,
   User,
   MapPin,
   Calendar,
@@ -41,10 +47,61 @@ interface CaseDetailPageProps {
 
 export default function CaseDetailPage({ params }: CaseDetailPageProps) {
   const { id } = use(params)
+  const router = useRouter()
   const [caseData, setCaseData] = useState<Case | null>(null)
   const [loading, setLoading] = useState(true)
   const [noteText, setNoteText] = useState("")
   const [savingNote, setSavingNote] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [editForm, setEditForm] = useState({
+    court_name: "",
+    prison_name: "",
+    hearing_outcome: "",
+    bail_status: ""
+  })
+
+  // Effect to populate edit modal securely whenever case data changes internally
+  useEffect(() => {
+    if (caseData) {
+      setEditForm({
+        court_name: caseData.nextHearing?.court || "",
+        prison_name: caseData.prison || "",
+        hearing_outcome: caseData.nextHearing?.purpose || "",
+        bail_status: caseData.applicationReady ? "GRANTED" : "PENDING"
+      })
+    }
+  }, [caseData])
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+    try {
+      await updateCase(id, { 
+        court_name: editForm.court_name || undefined, 
+        prison_name: editForm.prison_name || undefined, 
+        hearing_outcome: editForm.hearing_outcome || undefined, 
+        bail_status: editForm.bail_status || undefined 
+      })
+      const cases = await fetchCases()
+      const found = cases.find(c => c.id === id)
+      if (found) setCaseData(found)
+      setIsEditDialogOpen(false)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    setIsSubmitting(true)
+    try {
+      await deleteCase(id)
+      router.push('/paralegal')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   useEffect(() => {
     fetchCases()
@@ -129,6 +186,14 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
               </Button>
             </Link>
             <div className="flex items-center gap-2 flex-wrap">
+              <Button onClick={() => setIsEditDialogOpen(true)} variant="outline" size="sm" className="gap-2 border-[#D4D0C5] text-[#1B3A6B] hover:bg-[#E8E5DC]">
+                <Edit className="h-4 w-4" />
+                <span className="hidden sm:inline">Edit Case</span>
+              </Button>
+              <Button onClick={() => setIsDeleteDialogOpen(true)} variant="outline" size="sm" className="gap-2 border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300">
+                <Trash2 className="h-4 w-4" />
+                <span className="hidden sm:inline">Delete Case</span>
+              </Button>
               <Button variant="outline" size="sm" className="gap-2 border-[#D4D0C5] text-[#1B3A6B] hover:bg-[#E8E5DC]">
                 <Printer className="h-4 w-4" />
                 <span className="hidden sm:inline">Print Brief</span>
@@ -439,6 +504,67 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
             </div>
           </div>
         </div>
+        {/* Edit Case Modal */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Quick Edit Case</DialogTitle>
+              <DialogDescription>
+                Update operational fields. Click save when you're done.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleEditSubmit} className="space-y-4 pt-4">
+              <div className="space-y-2">
+                <Label>Assigned Court</Label>
+                <Input value={editForm.court_name} onChange={e => setEditForm(prev => ({...prev, court_name: e.target.value}))} placeholder="e.g. Sessions Court" />
+              </div>
+              <div className="space-y-2">
+                <Label>Prison Location</Label>
+                <Input value={editForm.prison_name} onChange={e => setEditForm(prev => ({...prev, prison_name: e.target.value}))} placeholder="e.g. Central Jail" />
+              </div>
+              <div className="space-y-2">
+                <Label>Hearing Outcome</Label>
+                <Input value={editForm.hearing_outcome} onChange={e => setEditForm(prev => ({...prev, hearing_outcome: e.target.value}))} placeholder="e.g. Adjourned" />
+              </div>
+              <div className="space-y-2">
+                <Label>Bail Status</Label>
+                <Select value={editForm.bail_status} onValueChange={v => setEditForm(prev => ({...prev, bail_status: v}))}>
+                  <SelectTrigger><SelectValue placeholder="Select Status" /></SelectTrigger>
+                  <SelectContent className="bg-white">
+                    <SelectItem value="PENDING">Pending</SelectItem>
+                    <SelectItem value="GRANTED">Granted</SelectItem>
+                    <SelectItem value="DENIED">Denied</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
+                <Button type="submit" disabled={isSubmitting} className="bg-[#1B3A6B] text-white hover:bg-[#2A4A7B]">
+                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Save Changes
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Modal */}
+        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle className="text-red-600">Delete Case?</DialogTitle>
+              <DialogDescription>
+                This action cannot be undone. This will permanently delete the case from the system.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="mt-4">
+              <Button type="button" variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>Cancel</Button>
+              <Button type="button" disabled={isSubmitting} variant="destructive" onClick={handleDelete}>
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />} Delete Permanently
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
       </main>
     </div>
   )
