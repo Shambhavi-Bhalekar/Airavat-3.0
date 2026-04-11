@@ -6,6 +6,7 @@ from groq import Groq
 from db import supabase
 from ml_models import compute_score
 from ml_delay import predict_delay
+from financial_intelligence import evaluate_surety
 from models import ClientCreate, CaseCreate
 from utils import calculate_detention_days, format_gemma_prompt, generate_audio_file, generate_translated_message, send_notifications, send_whatsapp_voice_note
 import traceback
@@ -66,6 +67,10 @@ def create_case(case: CaseCreate):
         delay_result = predict_delay(case_dict)
         case_dict["adjournment_prob"] = int(delay_result["delay_probability"])
         case_dict["delay_decision"] = delay_result["decision"]
+        
+        # 4.2. Run Financial/Surety Evaluation
+        finance_result = evaluate_surety(case_dict)
+        case_dict.update(finance_result)
         
         # Add mock status that might be updated later
         if "hearing_outcome" not in case_dict:
@@ -136,6 +141,10 @@ def predict_all_cases():
             delay_result = predict_delay(case)
             updates["adjournment_prob"] = int(delay_result["delay_probability"])
             updates["delay_decision"] = delay_result["decision"]
+            
+            # Predict Surety/Financial Access logic
+            finance_result = evaluate_surety(case)
+            updates.update(finance_result)
             
             if "bailable" in case:
                 updates["eligible"] = True if case.get("bailable") == "Bailable" else False
