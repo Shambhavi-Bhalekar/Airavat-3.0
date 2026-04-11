@@ -19,6 +19,7 @@ import {
   FilePlus,
   X,
   Menu,
+  LogOut,
 } from "lucide-react"
 
 interface NavItem {
@@ -126,7 +127,7 @@ function SidebarContent({
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#C9A84C] text-[#1B3A6B] text-sm font-medium">
             {role === "paralegal" ? "PK" : "SC"}
           </div>
-          <div className="flex flex-col min-w-0">
+          <div className="flex flex-col min-w-0 flex-1">
             <span className="text-sm font-medium text-white truncate">
               {role === "paralegal" ? "Priya Kumari" : "Suresh Chandra"}
             </span>
@@ -134,6 +135,13 @@ function SidebarContent({
               {role === "paralegal" ? "DLSA Lucknow" : "UTRC Coordinator"}
             </span>
           </div>
+          <Link
+            href="/login"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-white/70 hover:bg-[#1B3A6B] hover:text-white transition-colors"
+            title="Log Out"
+          >
+            <LogOut className="h-4 w-4" />
+          </Link>
         </div>
       </div>
     </aside>
