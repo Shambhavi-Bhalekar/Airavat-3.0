@@ -1,8 +1,10 @@
 from datetime import datetime
 from typing import Optional
 import os
+import uuid
 from groq import Groq
 from twilio.rest import Client
+from gtts import gTTS
 
 # Twilio Setup (Get these from your Twilio Console)
 TWILIO_SID = os.getenv("TWILIO_ACCOUNT_SID")
@@ -13,8 +15,12 @@ TWILIO_SMS_FROM = os.getenv("TWILIO_SMS_FROM") # Your Twilio Phone Number
 twilio_client = Client(TWILIO_SID, TWILIO_AUTH)
 
 # Groq Setup
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY", "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"))
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
+audio_lang_codes = {
+    "hindi": "hi", "marathi": "mr", "tamil": "ta",
+    "bengali": "bn", "telugu": "te", "english": "en-in"
+}
 
 def calculate_detention_days(date_str: Optional[str]) -> int:
     """Calculates days elapsed since the date string or datetime object provided."""
@@ -62,39 +68,33 @@ def format_gemma_prompt(case_data: dict) -> str:
     """
     return prompt.strip()
 
+# --- Helper 1: Enhanced Translation Engine ---
 def generate_translated_message(case_data: dict) -> str:
-    # 1. Build the SAFE English baseline (No ML scores, no legal jargon)
-    status = "Eligible for Legal Review/Bail" if case_data.get("eligible") else "Awaiting Legal Processing"
-    if case_data.get("conflict_flag"):
-         status = "Requires Specialized Legal Review"
-
-    action = "Proceeding with legal application" if case_data.get("eligible") else "Monitoring case for next steps"
-    if case_data.get("priority_level") == "HIGH" and case_data.get("eligible"):
-        action = "High priority: Paralegal assigned for immediate action"
-
-    english_baseline = f"""
-    Case Update for ID: {case_data.get('report_number')} ({case_data.get('city')})
-    Current Status: {status}
-    Days in Detention: {case_data.get('detention_days')}
-    Current Action: {action}
-    """
-
-    # 2. Use Groq to safely translate it
-    target_language = case_data.get("mother_tongue", "English")
+    """Builds a rich summary using all available Supabase columns."""
     
-    # If it's already English, just return the baseline with the disclaimer
-    if target_language.lower() == "english":
-         return english_baseline + "\n\n*This is an automated update. Please contact your DLSA paralegal for questions. This is not legal advice.*"
+    # Base status logic
+    status = "Eligible for Bail. Action Required." if case_data.get("eligible") else "Awaiting Legal Processing."
+    if case_data.get("surety_blocked"):
+         status = f"Bail Granted, but Surety of Rs. {case_data.get('surety_amount', 0)} is pending."
+
+    # Build a comprehensive English baseline utilizing the new columns
+    english_baseline = f"Case Update for ID: {case_data.get('report_number')}."
+    english_baseline += f"\nLocation: {case_data.get('prison_name', 'Local Jail')}, {case_data.get('city', 'Unknown City')}."
+    if case_data.get("court_name"):
+        english_baseline += f"\nCourt: {case_data.get('court_name')}."
+    english_baseline += f"\nCurrent Status: {status}"
+    if case_data.get("hearing_outcome"):
+        english_baseline += f"\nRecent Outcome: {case_data.get('hearing_outcome')}"
+    
+    target_language = case_data.get("mother_tongue", "English")
+    if target_language.lower() == "english": 
+        return english_baseline
 
     system_prompt = f"""
-    Translate the following court update into {target_language}.
-    RULES:
-    1. Maintain a 5th-grade reading level. Keep it empathetic and simple.
-    2. Do NOT add any predictions or legal advice.
-    3. You MUST append this exact disclaimer at the end in {target_language}: "This is an automated update. Please contact your DLSA paralegal for questions. This is not legal advice."
+    Translate the following legal update into {target_language}.
+    RULES: Use a 5th-grade reading level. Be empathetic. NO predictions. NO legal advice.
     Return ONLY the translated text.
     """
-
     try:
         response = groq_client.chat.completions.create(
             messages=[
@@ -107,32 +107,48 @@ def generate_translated_message(case_data: dict) -> str:
         return response.choices[0].message.content.strip()
     except Exception as e:
         print(f"Translation failed: {e}")
-        return english_baseline # Fallback to English if LLM fails
+        return english_baseline
 
-# --- Helper 2: Twilio Sender ---
-def send_notifications(phone_number: str, message_body: str):
-    # Ensure phone number has country code (e.g., +91 for India)
+# --- Helper 2: Audio Generator ---
+def generate_audio_file(translated_text: str, language: str) -> str:
+    lang_code = audio_lang_codes.get(language.lower(), "hi") # defaults to Hindi
+    filename = f"audio_{uuid.uuid4().hex[:8]}.mp3"
+    filepath = os.path.join("static", filename)
+    try:
+        tts = gTTS(text=translated_text, lang=lang_code, slow=False)
+        tts.save(filepath)
+        return filename
+    except Exception as e:
+        print(f"Audio generation failed: {e}")
+        return None
+
+# --- Helper 3: Twilio Sender ---
+def send_whatsapp_voice_note(phone_number: str, text_message: str, audio_url: str = None):
+    # Ensure proper WhatsApp formatting
+    if phone_number.startswith("whatsapp:"):
+        phone_number = phone_number.replace("whatsapp:", "")
     if not phone_number.startswith("+"):
         phone_number = "+91" + phone_number 
 
-    # 1. Send WhatsApp
+    # MESSAGE 1: Send the Text Transcript
     try:
         twilio_client.messages.create(
             from_=TWILIO_WHATSAPP_FROM,
-            body=message_body,
+            body=text_message,
             to=f"whatsapp:{phone_number}"
         )
-        print(f"WhatsApp sent to {phone_number}")
+        print(f"✅ WhatsApp Text sent to {phone_number}")
     except Exception as e:
-        print(f"WhatsApp Error: {e}")
+        print(f"❌ WhatsApp Text Error: {e}")
 
-    # 2. Send SMS
-    # try:
-    #     twilio_client.messages.create(
-    #         from_=TWILIO_SMS_FROM,
-    #         body=message_body,
-    #         to=phone_number
-    #     )
-    #     print(f"SMS sent to {phone_number}")
-    # except Exception as e:
-    #     print(f"SMS Error: {e}")
+    # MESSAGE 2: Send the Audio File (Voice Note) separately
+    if audio_url:
+        try:
+            twilio_client.messages.create(
+                from_=TWILIO_WHATSAPP_FROM,
+                media_url=[audio_url],
+                to=f"whatsapp:{phone_number}"
+            )
+            print(f"✅ WhatsApp Audio sent to {phone_number}")
+        except Exception as e:
+            print(f"❌ WhatsApp Audio Error: {e}")

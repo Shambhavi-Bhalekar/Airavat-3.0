@@ -1,9 +1,12 @@
-from fastapi import FastAPI, HTTPException, Request, Body
+import os
+
+from fastapi import FastAPI, HTTPException, Request, Body, requests
 from fastapi.middleware.cors import CORSMiddleware
+from groq import Groq
 from db import supabase
 from ml_models import compute_score
 from models import ClientCreate, CaseCreate
-from utils import calculate_detention_days, format_gemma_prompt, generate_translated_message, send_notifications
+from utils import calculate_detention_days, format_gemma_prompt, generate_audio_file, generate_translated_message, send_notifications, send_whatsapp_voice_note
 import traceback
 
 app = FastAPI(title="JusticeGrid API")
@@ -16,6 +19,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+TWILIO_SID = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH = os.getenv("TWILIO_AUTH_TOKEN")
 
 @app.post("/client")
 def create_client(client: ClientCreate):
@@ -135,26 +143,136 @@ def predict_all_cases():
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- The Webhook Endpoint ---
+# ==========================================
+# ENDPOINT 1: OUTBOUND NOTIFICATIONS (FROM DB)
+# ==========================================
 @app.post("/supabase-webhook")
 async def handle_supabase_update(request: Request):
     payload = await request.json()
-    
-    # Supabase webhooks send the updated row in the 'record' object
-    # We only want to trigger this on UPDATE or INSERT
     if payload.get("type") in ["UPDATE", "INSERT"]:
         case_data = payload.get("record", {})
         phone_number = case_data.get("family_contact_number")
+        language = case_data.get("mother_tongue", "Hindi")
         
-        if not phone_number:
-            return {"status": "Ignored", "reason": "No family contact number provided"}
+        if not phone_number: return {"status": "Ignored"}
 
-        # Generate the language-specific message
-        final_message = generate_translated_message(case_data)
+        print(f"🔄 Processing outbound DB update for Case {case_data.get('report_number')}...")
+        translated_text = generate_translated_message(case_data)
+        audio_filename = generate_audio_file(translated_text, language)
         
-        # Fire off the Twilio blasts
-        send_notifications(phone_number, final_message)
+        host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+        scheme = request.headers.get("x-forwarded-proto") or "https"
+        audio_url = f"{scheme}://{host}/static/{audio_filename}" if audio_filename else None
         
-        return {"status": "Success", "message_sent": True}
+        intro_text = f"📄 {translated_text}\n\n👇 Listen to this update below:"
+        send_whatsapp_voice_note(phone_number, intro_text, audio_url)
         
-    return {"status": "Ignored", "reason": "Not an INSERT or UPDATE"}
+        return {"status": "Success"}
+    return {"status": "Ignored"}
+
+
+# ==========================================
+# ENDPOINT 2: INBOUND REPLIES (FROM TWILIO)
+# ==========================================
+@app.post("/whatsapp-inbound")
+async def handle_whatsapp_reply(request: Request):
+    form_data = await request.form()
+    sender_phone = form_data.get("From") 
+    user_text = form_data.get("Body", "").strip()
+    num_media = int(form_data.get("NumMedia", 0))
+
+    print(f"📥 Received message from {sender_phone}")
+
+    # --- Step 1: STT for Audio Processing ---
+    if num_media > 0:
+        media_url = form_data.get("MediaUrl0")
+        print("🎵 Voice note detected. Transcribing...")
+        audio_response = requests.get(media_url, auth=(TWILIO_SID, TWILIO_AUTH))
+        
+        if audio_response.status_code == 200:
+            try:
+                transcription = groq_client.audio.transcriptions.create(
+                    file=("voice_note.ogg", audio_response.content),
+                    model="whisper-large-v3"
+                )
+                user_text = transcription.text
+                print(f"📝 Transcribed: {user_text}")
+            except Exception as e:
+                print(f"STT Error: {e}")
+                user_text = "I sent a voice note but it could not be transcribed."
+
+    # --- Step 2: Database Retrieval via Supabase ---
+    clean_phone = sender_phone.replace("whatsapp:", "")
+    if not clean_phone.startswith("+"):
+        clean_phone = "+91" + clean_phone
+
+    case_context = "No specific case data found for this phone number."
+    target_language = "Hindi" # Fallback
+    
+    try:
+        # Look up the family's case in Supabase using their phone number
+        res = supabase.table("cases").select("*").eq("family_contact_number", clean_phone).order("created_at", desc=True).limit(1).execute()
+        
+        if res.data and len(res.data) > 0:
+            case_info = res.data[0]
+            target_language = case_info.get("mother_tongue", "Hindi")
+            status = "Eligible for Bail" if case_info.get("eligible") else "Awaiting Legal Processing"
+            
+            # Construct exact context for the AI
+            case_context = f"""
+            CASE CONTEXT FOR THIS CALLER:
+            - Report Number: {case_info.get('report_number')}
+            - City / Prison: {case_info.get('city')}, {case_info.get('prison_name', 'Unknown')}
+            - Court: {case_info.get('court_name', 'Pending Assignment')}
+            - Detention Days: {case_info.get('detention_days')}
+            - Current Status: {status}
+            - Bail Status: {case_info.get('bail_status', 'Pending')}
+            - Hearing Outcome: {case_info.get('hearing_outcome', 'Pending')}
+            - Surety Blocked: {case_info.get('surety_blocked')}
+            - Surety Amount: Rs. {case_info.get('surety_amount', 0)}
+            """
+            print(f"🔍 Found DB Context for {clean_phone} in {target_language}")
+    except Exception as e:
+        print(f"Database lookup failed: {e}")
+
+    # --- Step 3: Guardrailed LLM Generation ---
+    system_prompt = f"""
+    You are JusticeGrid, an AI assistant helping families of undertrial prisoners in India.
+    A family member has just asked you a question. 
+
+    {case_context}
+    
+    CRITICAL RULES:
+    1. NEVER give legal advice.
+    2. NEVER predict case outcomes or timelines.
+    3. Keep answers under 3 sentences. Use 5th-grade language.
+    4. Respond in the same language the user asked the question in (their database preference is {target_language}).
+    5. If they ask a complex legal question, say: "I cannot give legal advice. Please contact your DLSA paralegal or the helpline."
+    6. If Case Context is provided above, use it to accurately answer their specific question. Do NOT say "according to the database", just answer naturally.
+    """
+
+    print("🧠 Generating contextual response...")
+    try:
+        reply_response = groq_client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_text}
+            ],
+            model="llama-3.3-70b-versatile",
+            temperature=0.2
+        )
+        safe_reply = reply_response.choices[0].message.content.strip()
+    except Exception as e:
+        safe_reply = "I am having trouble understanding right now. Please contact the DLSA helpline."
+
+    # --- Step 4: Outbound Audio & Text Generation ---
+    audio_filename = generate_audio_file(safe_reply, target_language)
+    
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    scheme = request.headers.get("x-forwarded-proto") or "https"
+    audio_url = f"{scheme}://{host}/static/{audio_filename}" if audio_filename else None
+    
+    final_text = f"📄 {safe_reply}\n\n👇 Audio response:"
+    send_whatsapp_voice_note(sender_phone, final_text, audio_url)
+
+    return {"status": "Replied"}
