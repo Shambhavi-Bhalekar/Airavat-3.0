@@ -299,3 +299,83 @@ export async function predictAll(): Promise<{
   if (!res.ok) throw new Error(`POST /predict-all failed: ${res.status}`)
   return res.json()
 }
+
+// ─── Systemic Insights & Pattern Alerts (Pillar 04 & 08) ─────────────────────
+
+/** Get insights on charge sections and detention times */
+export async function fetchChargeSectionInsights(): Promise<{
+  status: string
+  insights: Record<string, any>
+  confidence: number
+  uncertaintyNote: string
+}> {
+  const res = await fetch(`${BASE_URL}/systemic-insights/charge-sections`, {
+    cache: 'no-store',
+  })
+  if (!res.ok) throw new Error(`GET /systemic-insights/charge-sections failed: ${res.status}`)
+  return res.json()
+}
+
+/** Get insights on court bail decision intervals */
+export async function fetchCourtInsights(): Promise<{
+  status: string
+  insights: Record<string, any>
+  confidence: number
+  uncertaintyNote: string
+}> {
+  const res = await fetch(`${BASE_URL}/systemic-insights/courts`, {
+    cache: 'no-store',
+  })
+  if (!res.ok) throw new Error(`GET /systemic-insights/courts failed: ${res.status}`)
+  return res.json()
+}
+
+/** Get insights on prison eligible-but-unserved density */
+export async function fetchPrisonInsights(): Promise<{
+  status: string
+  insights: Record<string, any>
+  confidence: number
+  uncertaintyNote: string
+}> {
+  const res = await fetch(`${BASE_URL}/systemic-insights/prisons`, {
+    cache: 'no-store',
+  })
+  if (!res.ok) throw new Error(`GET /systemic-insights/prisons failed: ${res.status}`)
+  return res.json()
+}
+
+/** Get insights on surety blocking analysis */
+export async function fetchSuretyAnalysis(): Promise<{
+  status: string
+  insights: Record<string, any>
+  confidence: number
+  uncertaintyNote: string
+}> {
+  const res = await fetch(`${BASE_URL}/systemic-insights/surety-analysis`, {
+    cache: 'no-store',
+  })
+  if (!res.ok) throw new Error(`GET /systemic-insights/surety-analysis failed: ${res.status}`)
+  return res.json()
+}
+
+/** Get pattern alerts for courts with high eligible case adjournments */
+export async function fetchPatternAdjournmentAlerts(): Promise<{
+  status: string
+  quarter_range: string
+  alerts: Array<{
+    court: string
+    high_adjournment_count: number
+    alert_level: 'CRITICAL' | 'WARNING' | 'INFO'
+    recommendation: string
+    confidence: number
+    case_count: number
+  }>
+  confidence: number
+  uncertaintyNote: string
+}> {
+  const res = await fetch(`${BASE_URL}/alerts/pattern-adjournments`, {
+    cache: 'no-store',
+  })
+  if (!res.ok) throw new Error(`GET /alerts/pattern-adjournments failed: ${res.status}`)
+  return res.json()
+}

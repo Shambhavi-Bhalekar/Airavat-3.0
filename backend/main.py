@@ -10,6 +10,13 @@ from ml_delay import predict_delay
 from financial_intelligence import evaluate_surety
 from models import UserSignup, UserLogin, ClientCreate, CaseCreate
 from utils import calculate_detention_days, format_gemma_prompt, generate_audio_file, generate_translated_message, send_whatsapp_voice_note
+from systemic_insights import (
+    get_charge_section_delays,
+    get_court_bail_intervals,
+    get_prison_eligible_density,
+    get_surety_blocking_analysis,
+    get_pattern_high_adjournments_by_quarter
+)
 import traceback
 import sys
 
@@ -248,6 +255,56 @@ def predict_all_cases():
     except Exception as e:
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+
+# ==========================================
+# SYSTEMIC PATTERN INTELLIGENCE ENDPOINTS
+# (Pillar 04 & 08)
+# ==========================================
+
+@app.get("/systemic-insights/charge-sections")
+def get_insights_charge_sections():
+    """
+    Returns: Which charge sections drive the longest undertrial detention.
+    Part of Pillar 04 - Systemic Pattern Intelligence.
+    """
+    return get_charge_section_delays()
+
+
+@app.get("/systemic-insights/courts")
+def get_insights_courts():
+    """
+    Returns: Which courts have the worst bail-decision intervals.
+    Part of Pillar 04 - Systemic Pattern Intelligence.
+    """
+    return get_court_bail_intervals()
+
+
+@app.get("/systemic-insights/prisons")
+def get_insights_prisons():
+    """
+    Returns: Which prisons have the highest density of eligible-but-unserved undertrials.
+    Part of Pillar 04 - Systemic Pattern Intelligence.
+    """
+    return get_prison_eligible_density()
+
+
+@app.get("/systemic-insights/surety-analysis")
+def get_insights_surety():
+    """
+    Returns: Which surety amounts are blocking bail execution, correlated with local poverty indicators.
+    Part of Pillar 04 - Systemic Pattern Intelligence.
+    """
+    return get_surety_blocking_analysis()
+
+
+@app.get("/alerts/pattern-adjournments")
+def get_alerts_pattern_adjournments():
+    """
+    Returns: Courts where eligible cases have been adjourned 20+ times in a quarter.
+    Surfaces pattern alerts to UTRC when thresholds are breached.
+    Part of Pillar 08 - UTRC Pattern Alerts & Uncertainty Display.
+    """
+    return get_pattern_high_adjournments_by_quarter()
 
 # ==========================================
 # ENDPOINT 1: OUTBOUND NOTIFICATIONS (FROM DB)

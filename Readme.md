@@ -120,6 +120,7 @@ Supabase Webhook
 * ✅ **Case Detail Page**: Full eligibility assessment, charge breakdown, AI reasoning chain, and paralegal notes (saved to backend via `PUT /case/{id}`)
 * ✅ **Multi-Step Case Entry Form**: Submits to `POST /client` + `POST /case`, maps form fields to backend schema, and shows the real Supabase case ID on success
 * ✅ **Coordinator Dashboard**: Top-4 stat cards derived from live cases; **Re-score All Cases** button triggers `POST /predict-all` against Gemma-4
+* ✅ **Quick Analytics & Visualizations**: Small dashboard visuals (bar, line, pie) added to the Coordinator dashboard to surface system-level trends and pattern alerts. Implemented with `react-chartjs-2` + `chart.js` (see `components/analytics`).
 * ✅ **Loading States**: Spinner on every data-fetching page
 * ✅ **Error Banners**: Offline warning banner shown when backend is unreachable
 
@@ -204,6 +205,8 @@ sh setup_gemma.sh
 ```bash
 cd frontend_final
 npm install
+# Install charting packages used by the Coordinator dashboard visuals
+npm install react-chartjs-2 chart.js
 ```
 
 #### Step 4: Configure Environment
@@ -333,6 +336,16 @@ The **adapter function** (`adaptBackendCase`) handles the field-name differences
 |--------|----------|-------------|
 | POST | `/predict-all` | Re-run Gemma-4 scoring on all cases in the database |
 
+### Systemic Insights & Pattern Alerts (Pillar 04 & 08)
+
+| Method | Endpoint | Description | Response |
+|--------|----------|-------------|----------|
+| GET | `/systemic-insights/charge-sections` | Which IPC sections drive longest undertrial detention | Array of sections with avg detention_days, eligible count, confidence |
+| GET | `/systemic-insights/courts` | Which courts have worst bail-decision intervals | Array of courts with avg bail_delay_days, eligible cases delayed, confidence |
+| GET | `/systemic-insights/prisons` | Which prisons have highest eligible-but-unserved density | Array of prisons with density %, avg detention, confidence |
+| GET | `/systemic-insights/surety-analysis` | Which surety amounts block bail, correlated with local poverty | Array of cities with blocking_ratio %, avg surety vs 90-day wage cap, confidence |
+| GET | `/alerts/pattern-adjournments` | Courts with 20+ eligible cases adjourned in quarter | CRITICAL/WARNING alerts by court, recommendations, confidence disclaimers |
+
 ### Webhooks
 
 | Method | Endpoint | Triggered By |
@@ -389,7 +402,152 @@ When a case is created/updated, the system:
 
 ---
 
-## 🔧 Component Deep Dive
+## � Database Schema & Structure
+
+JusticeGrid uses **Supabase PostgreSQL** for all persistent data. This section documents the schema for future reference and modifications.
+
+### 🔗 Tables Overview
+
+```
+┌─────────────────────┐
+│  app_users          │ (Authentication & role management)
+├─────────────────────┤
+│  clients            │ (Family/prisoner demographics)
+├─────────────────────┤
+│  cases (Main)       │ (Undertrial case records & AI scores)
+└─────────────────────┘
+```
+
+---
+
+### 📊 Table: `cases` (Primary Case Record)
+
+**Purpose:** Stores all undertrial case data, detention tracking, eligibility assessment, priority scores, bail information, and AI-computed metrics.
+
+**Columns:**
+
+| Column Name | Type | Default | Nullable | Purpose |
+|---|---|---|---|---|
+| `id` | `uuid` | `gen_random_uuid()` | ❌ | Primary key; unique case identifier |
+| `report_number` | `int4` | — | ✅ | FIR report number for tracking |
+| `client_id` | `text` | — | ✅ | Foreign key to `clients` table (prisoner ID) |
+| `city` | `text` | — | ✅ | City where case was filed |
+| `crime_description` | `text` | — | ✅ | Free-form description of the crime |
+| `assigned_ipc` | `text` | — | ✅ | Indian Penal Code section(s) (e.g., "377, 506") |
+| `assigned_bns` | `text` | — | ✅ | Bhratiya Nyaya Sanhita equivalent section (transitional mapping) |
+| `date_reported` | `timestamp` | — | ✅ | When the FIR was filed |
+| `date_of_occurrence` | `timestamp` | — | ✅ | When the alleged crime occurred |
+| `victim_age` | `int4` | — | ✅ | Age of the victim |
+| `victim_gender` | `text` | — | ✅ | Gender of the victim ("Male", "Female", "Other") |
+| `max_sentence` | `int4` | — | ✅ | Maximum sentence in years for the offense |
+| `bailable` | `text` | — | ✅ | Bail status ("Bailable" or "Non-Bailable") |
+| `cognizable` | `text` | — | ✅ | Cognizable status ("Cognizable" or "Non-Cognizable") |
+| **Detention & Eligibility** |
+| `detention_days` | `int4` | — | ✅ | Days in custody since date_of_occurrence (auto-calculated) |
+| `eligible` | `bool` | — | ✅ | Section 479 BNSS eligibility determination (true/false) |
+| `eligible_but_detained` | `bool` | — | ✅ | Flag: eligible for bail but still detained (action required) |
+| **AI Scores & Reasoning** |
+| `priority_score` | `int4` | — | ✅ | Composite priority score (0–200) from Gemma-4 LLM |
+| `priority_level` | `text` | — | ✅ | Priority level derived from score: "HIGH", "MEDIUM", "LOW" |
+| `adjournment_prob` | `int4` | — | ✅ | Estimated probability (0–100) of case adjournment |
+| `confidence` | `float8` | — | ✅ | LLM confidence in the assessment (0.0–1.0) |
+| `conflict_flag` | `text` | — | ✅ | Serious offense indicator: "SERIOUS_OFFENCE" if max_sentence ≥ 20 |
+| `reason` | `text` | — | ✅ | Plain-text reasoning for priority score (from LLM) |
+| **Hearing & Adjournment** |
+| `next_hearing_date` | `timestamp` | — | ✅ | Scheduled next hearing date |
+| `last_hearing_date` | `timestamp` | — | ✅ | Most recent hearing date |
+| `hearing_outcome` | `text` | — | ✅ | Result of last hearing ("Adjourned", "Remanded", "Bail Granted", etc.) |
+| **Bail Status** |
+| `bail_status` | `text` | — | ✅ | Current bail state ("PENDING", "GRANTED", "REJECTED", "APPEALED") |
+| `bail_decision_date` | `timestamp` | — | ✅ | Date when bail decision was made by court |
+| `bail_delay_days` | `int4` | — | ✅ | Number of days between eligibility and bail grant |
+| `surety_amount` | `int4` | — | ✅ | Bail surety amount in INR (Rupees) |
+| `surety_blocked` | `bool` | — | ✅ | Flag: surety amount exceeds 90-day poverty threshold (Section 440 relief needed) |
+| **Location & Tracking** |
+| `court_name` | `text` | — | ✅ | Name of court handling the case |
+| `prison_name` | `text` | — | ✅ | Current place of detention (prison/jail name) |
+| **Family Contact** |
+| `family_contact_number` | `text` | — | ✅ | Family phone number for WhatsApp/SMS notifications |
+| `mother_tongue` | `text` | — | ✅ | Family's preferred language for notifications |
+| **Case Status** |
+| `case_closed` | `bool` | `false` | ❌ | True if case is concluded or bail executed |
+| **Audit Trail** |
+| `created_at` | `timestamp` | `now()` | ❌ | When this report was created in JusticeGrid |
+| `updated_at` | `timestamp` | `now()` | ❌ | Timestamp of last update |
+
+---
+
+### 👤 Table: `app_users` (User Authentication & Role Management)
+
+**Purpose:** Tracks registered users (paralegals, UTRC coordinators) with role-based access control.
+
+**Columns:**
+
+| Column Name | Type | Default | Nullable | Purpose |
+|---|---|---|---|---|
+| `id` | `uuid` | `gen_random_uuid()` | ❌ | Primary key |
+| `full_name` | `text` | — | ✅ | User's full name |
+| `email` | `text` | — | ❌ | Email (also used for login) |
+| `password_hash` | `text` | — | ✅ | Hashed password (bcrypt or similar) |
+| `district` | `text` | — | ✅ | District where user operates |
+| `role` | `text` | — | ✅ | Role: "paralegal", "utrc_coordinator", "supervisor" |
+| `is_active` | `bool` | `true` | ✅ | Account activation flag |
+| `created_at` | `timestamptz` | `now()` | ❌ | When account was created |
+
+---
+
+### 👨‍👩‍👧‍👦 Table: `clients` (Family / Prisoner Demographics)
+
+**Purpose:** Stores demographic and contact info for families of undertrials.
+
+**Columns:**
+
+| Column Name | Type | Default | Nullable | Purpose |
+|---|---|---|---|---|
+| `client_id` | `text` | — | ✅ | Primary identifier (usually formatted like "CL-00001") |
+| `mother_tongue` | `text` | — | ✅ | Prisoner/family's native language for translations |
+| `family_contact_number` | `text` | — | ✅ | Phone number for WhatsApp/SMS (international format preferred: +91XXXXXXXXXX) |
+| `created_at` | `timestamp` | `now()` | ❌ | When record was created |
+
+---
+
+### 🔑 Key Relationships
+
+```
+clients (client_id) ←─────→ cases (client_id)
+  [One client]              [Many cases]
+```
+
+### 📈 Systemic Insights Derivable from `cases` Table
+
+All systemic intelligence (Pillar 04 & 08) is **queried directly** from the `cases` table without creating new tables:
+
+| Insight | Query Pattern | Uses Columns |
+|---|---|---|
+| Charge sections driving longest detention | `GROUP BY assigned_ipc` → `AVG(detention_days)` | `assigned_ipc`, `detention_days`, `eligible` |
+| Courts with worst bail intervals | `GROUP BY court_name` → `AVG(bail_delay_days)` | `court_name`, `bail_delay_days`, `bail_status` |
+| Prisons with highest eligible-but-unserved density | `GROUP BY prison_name` → `COUNT(eligible_but_detained)` | `prison_name`, `eligible_but_detained`, `case_closed` |
+| Surety amounts blocking bail vs poverty | `GROUP BY city` → `COUNT(surety_blocked)`, compare `surety_amount` vs local median wage | `city`, `surety_amount`, `surety_blocked`, `confidence` |
+| Pattern alerts for high adjournments | `WHERE eligible=true AND adjournment_prob>=70` → `GROUP BY court_name` → `COUNT()` over last 90 days | `court_name`, `eligible`, `adjournment_prob`, `created_at` |
+
+---
+
+### 🔧 Database Configuration (Supabase)
+
+**Project Setup Steps:**
+
+1. Create Supabase project at [supabase.com](https://supabase.com)
+2. Note your **Project URL** and **API Key**
+3. In Supabase SQL Editor, run the schema initialization (creates tables with proper indexes and RLS policies)
+4. Set environment variables:
+   ```env
+   SUPABASE_URL=https://your-project.supabase.co
+   SUPABASE_KEY=your-public-api-key
+   ```
+
+---
+
+## �🔧 Component Deep Dive
 
 ### Backend
 
@@ -400,6 +558,9 @@ When a case is created/updated, the system:
 | `ml_models.py` | OpenAI SDK wrapper for local llama.cpp; fallback mock scoring |
 | `models.py` | Pydantic `ClientCreate` and `CaseCreate` schemas |
 | `utils.py` | Detention calculator, Gemma-4 prompt formatter, Groq translator, Twilio notifier |
+| `ml_delay.py` | Adjournment probability predictor (joblib ML model) |
+| `financial_intelligence.py` | Surety analysis engine; city → median wage mapping |
+| `systemic_insights.py` | **[NEW]** Pillar 04 & 08: Advanced pattern analytics; charge/court/prison/surety insights; adjournment alerts |
 
 ### Frontend
 
@@ -412,7 +573,10 @@ When a case is created/updated, the system:
 | `app/paralegal/case-queue/page.tsx` | Full queue with advanced search/filter/sort |
 | `app/paralegal/case-entry/page.tsx` | Multi-step new case registration form |
 | `app/case/[id]/page.tsx` | Case detail view + paralegal notes |
-| `app/coordinator/page.tsx` | District-level overview + Re-score All trigger |
+| `app/coordinator/page.tsx` | District-level overview + Re-score All trigger + **[NEW]** Systemic Insights & Pattern Alerts |
+| `components/systemic-insights-card.tsx` | **[NEW]** Pillar 04: Displays charge/court/prison/surety insights with confidence badges |
+| `components/pattern-alert-card.tsx` | **[NEW]** Pillar 08: Displays UTRC pattern alerts for high adjournments (color-coded severity) |
+| `components/uncertainty-display.tsx` | **[NEW]** Pillar 08: Prominently displays model confidence (0-100%) + disclaimer that predictions are inputs to judgment |
 | `components/` | Shared components: `CaseCard`, `EligibilityCard`, `StatusBadge`, etc. |
 
 ---

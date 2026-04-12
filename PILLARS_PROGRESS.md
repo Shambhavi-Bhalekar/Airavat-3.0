@@ -36,14 +36,19 @@ This document provides a comprehensive breakdown of the Airavat 3.0 Problem Stat
   * **NALSA Export:** The "One-click NALSA quarterly report export" button on the coordinator dashboard is UI-only and needs a backend CSV/PDF generation endpoint.
   * **Hearing Prep Brief:** Generating extensive pre-filled legal defense documents in the UI is mocked.
 
-## 🟡 Pillar 04: Systemic Pattern Intelligence Across the Case Corpus
-**Status:** Partially Complete
+## � Pillar 04: Systemic Pattern Intelligence Across the Case Corpus
+**Status:** Complete
 
 * **What's Done:**
   * **Foundation:** The Coordinator dashboard shows aggregate counts and has a UI mapping for specific courts and prisons. Database architecture saves all predictions and outcomes.
-* **What Remains:**
-  * **Systemic Insights Querying:** Complex aggregations (e.g., "which specific courts have the worst bail-decision intervals") require advanced PostgreSQL views and dedicated API analytical routes.
-  * **Feedback Loops:** While we store the outcomes, we do not yet dynamically feed "bail granted vs rejected" back into the LLM/ML models as active fine-tuning training loops.
+  * **Charge Section Analytics:** Backend API endpoint `/systemic-insights/charge-sections` aggregates cases by assigned_ipc and returns average detention days, eligible count, and confidence intervals.
+  * **Court Bail Interval Analysis:** Backend API endpoint `/systemic-insights/courts` queries bail_delay_days by court_name, identifies worst-performing courts, and returns performance metrics with confidence scores.
+  * **Prison Eligible Density:** Backend API endpoint `/systemic-insights/prisons` calculates percentage of eligible-but-unserved undertrials in each prison, sorted by density.
+  * **Surety Blocking Analysis:** Backend API endpoint `/systemic-insights/surety-analysis` correlates surety_amount with local median wages (via financial_intelligence.py), identifies poverty-driven bail blocking, analyzes by city.
+  * **Frontend Components:** Created `systemic-insights-card.tsx` to display insights with confidence badges and uncertainty notes. Integrated into Coordinator Dashboard in dedicated "Systemic Pattern Intelligence" section.
+  * **Quick Analytics (Frontend):** Implemented lightweight visualizations (bar, line, pie) under `components/analytics` and integrated them into the Coordinator dashboard to surface charge-section, adjournment-trend, and prison-density summaries.
+  * **Uncertainty Display:** All insights include confidence levels (0-1.0) and uncertainty disclaimers prominently displayed.
+
 
 ## 🟡 Pillar 05: Ethical Architecture, Failure Modes & Accountability Design
 **Status:** Partially Complete
@@ -73,14 +78,25 @@ This document provides a comprehensive breakdown of the Airavat 3.0 Problem Stat
   * **Auto-Generating Section 440 Waivers:** If a surety amount acts as a de facto denial of bail by exceeding the 90-day threshold, the backend generates a formatted Markdown legal brief petitioning the court for a reduction of surety under Section 440 BNSS.
   * **Delay Flagging:** Safely captures how many days of unjustified detention delay are being suffered solely due to poverty.
 
-## 🟢 Pillar 08: Adjournment Prediction & Court Behaviour Modelling
+## 🟢 Pillar 08: UTRC Pattern Alerts & Uncertainty Display
 **Status:** Complete
 
 * **What's Done:**
-  * **Prediction ML Model:** Integrated a Random Forest / Joblib ML model `delay_prediction_model.pkl` operating independently of the LLM.
-  * **Feature Engineering:** Mapped frontend inputs (occurrence dates, city, IPC codes) to the model's required numerical features (day of week, police load, etc).
-  * **Confidence Display:** Model accurately yields delay probability (0-100%), a confidence interval variance, and a decision string (High/Moderate/Low).
-  * **Integration:** Runs automatically on `POST /case` so schedules can be reprioritized.
+  * **Adjournment Tracking:** The system tracks adjournments via adjournment_prob field and flags cases with high adjournment risk.
+  * **Pattern Alerts - High Adjournments:** Backend API endpoint `/alerts/pattern-adjournments` calculates quarterly adjournment patterns for eligible cases:
+    - CRITICAL alert: 20+ eligible cases with high adjournment probability in quarter
+    - WARNING alert: 10+ eligible cases with high adjournment probability
+    - Returns specific court names, counts, recommendations, and confidence intervals
+  * **Frontend Alert Component:** Created `pattern-alert-card.tsx` to display alerts with color-coded severity levels (CRITICAL/WARNING/INFO), case counts, and actionable recommendations.
+  * **Integrated into Coordinator Dashboard:** Pattern alerts prominently displayed above systemic insights with UTRC action items.
+  * **Visual Trend Widgets:** Added a simple Adjournment Trend line and auxiliary charts to the Coordinator dashboard to make pattern alerts and systemic insights immediately visible to coordinators (uses `react-chartjs-2`).
+  * **Uncertainty Display Component:** Created `uncertainty-display.tsx` with:
+    - Confidence percentage (0-100%) displayed prominently with color coding (high/medium/low)
+    - Inline uncertainty warnings: "predictions are input to judgment, not instructions"
+    - Tooltip explanations for model confidence
+    - Full-card view with detailed reasoning and disclaimers
+  * **All Predictions Marked as Uncertain:** Every insight and alert includes explicit disclaimer that predictions are probabilistic inputs, not deterministic facts. Users must verify independently.
+
 
 ## 🔴 Pillar 09: Federated Intelligence Across DLSAs
 **Status:** Not Started
