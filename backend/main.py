@@ -243,7 +243,13 @@ def predict_all_cases():
                 llm_reason = ml_result.get("reasoning")
                 updates["reason"] = llm_reason if llm_reason else f"Eligible={updates['eligible']}, Detention={detention_days}, Delay Prob={updates['adjournment_prob']}%"
 
-            # Push back to DB safely - only updating ML fields
+            # Push back to DB safely — strip derived/non-schema keys first
+            updates.pop("delay_decision", None)
+            updates.pop("reasoning", None)
+            updates.pop("section_440_brief", None)
+            updates.pop("section_440_flag", None)
+            updates.pop("bail_delay_days", None)
+            updates.pop("surety_blocked", None)
             supabase.table("cases").update(updates).eq("id", case["id"]).execute()
             updated_cases.append(case["id"])
             
