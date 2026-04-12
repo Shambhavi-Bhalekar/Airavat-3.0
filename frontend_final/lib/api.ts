@@ -10,6 +10,7 @@ import type {
   ChargeSection,
   ConfidenceScore,
   CaseStatus,
+  MultiAgentDebate,
 } from './types'
 
 export const BASE_URL =
@@ -55,6 +56,40 @@ export interface BackendCase {
   surety_blocked?: boolean
   // Prison field (optional)
   prison_name?: string
+}
+
+// ─── Multi-Agent Reason Parser ────────────────────────────────────────────────
+
+/**
+ * Parses the special MULTIAGENT:: format stored in the `reason` column.
+ * Format: MULTIAGENT::<verdict>|<reasoning>|<confidence>|<transcript>
+ * Transcript format: "*** AGENT 1 (Name) ***\ntext\n\n*** AGENT 2 (Name) ***\ntext..."
+ */
+function parseMultiAgentReason(reason: string): MultiAgentDebate | null {
+  if (!reason.startsWith('MULTIAGENT::')) return null
+  try {
+    const payload = reason.slice('MULTIAGENT::'.length)
+    // Split into max 4 parts on the first 3 pipe separators
+    const pipeIdx1 = payload.indexOf('|')
+    const pipeIdx2 = payload.indexOf('|', pipeIdx1 + 1)
+    const pipeIdx3 = payload.indexOf('|', pipeIdx2 + 1)
+    const verdict    = payload.slice(0, pipeIdx1)
+    const reasoning  = payload.slice(pipeIdx1 + 1, pipeIdx2)
+    const confidence = Number(payload.slice(pipeIdx2 + 1, pipeIdx3))
+    const transcript = payload.slice(pipeIdx3 + 1).replace(/\\n/g, '\n')
+
+    // Parse individual agent blocks from transcript
+    const agentMessages: MultiAgentDebate['agentMessages'] = []
+    const agentRegex = /\*\*\* AGENT \d+ \(([^)]+)\) \*\*\*\n([\s\S]+?)(?=\n\n\*\*\* AGENT|$)/g
+    let match: RegExpExecArray | null
+    while ((match = agentRegex.exec(transcript)) !== null) {
+      agentMessages.push({ agent: match[1].trim(), content: match[2].trim() })
+    }
+
+    return { verdict, reasoning, confidence, agentMessages }
+  } catch {
+    return null
+  }
 }
 
 // ─── Adapter Helpers ───────────────────────────────────────────────────────────
@@ -111,6 +146,15 @@ function buildEligibility(raw: BackendCase): EligibilityAssessment {
       ? requiredDetention - detentionServed
       : null
 
+  const multiAgentDebate = raw.reason ? parseMultiAgentReason(raw.reason) : null
+
+  // For the reasoning chain bullets: use a plain summary when multi-agent
+  const reasoningChain = multiAgentDebate
+    ? [`⚖️ Multi-Agent Verdict: ${multiAgentDebate.verdict} (${multiAgentDebate.confidence}% confidence)`, multiAgentDebate.reasoning]
+    : raw.reason
+      ? raw.reason.split('. ').filter(Boolean)
+      : ['AI assessment pending']
+
   return {
     isEligible: raw.eligible ?? false,
     status: deriveCaseStatus(raw),
@@ -123,17 +167,18 @@ function buildEligibility(raw: BackendCase): EligibilityAssessment {
       requiredDetention > 0
         ? Math.min(100, Math.round((detentionServed / requiredDetention) * 100))
         : 0,
-    reasoningChain: raw.reason
-      ? raw.reason.split('. ').filter(Boolean)
-      : ['AI assessment pending'],
+    reasoningChain,
     uncertaintyFlags: raw.conflict_flag
       ? [`Conflict flag detected: ${raw.conflict_flag}`]
       : [],
-    dataSourcesUsed: ['JusticeGrid Backend'],
+    dataSourcesUsed: multiAgentDebate
+      ? ['Multi-Agent AI Debate', 'Judge Moderator Consensus', 'JusticeGrid Backend']
+      : ['JusticeGrid Backend'],
     timestamp: new Date().toISOString(),
     requiresLawyerReview:
       raw.conflict_flag === 'SERIOUS_OFFENCE' || raw.bailable === 'Non-Bailable',
     requiresHumanResolution: false,
+    multiAgentDebate: multiAgentDebate ?? undefined,
   }
 }
 

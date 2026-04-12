@@ -315,6 +315,7 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
                         steps={caseData.eligibility.reasoningChain}
                         uncertaintyFlags={caseData.eligibility.uncertaintyFlags}
                         dataSources={caseData.eligibility.dataSourcesUsed}
+                        multiAgentDebate={caseData.eligibility.multiAgentDebate}
                       />
                     </TabsContent>
                     

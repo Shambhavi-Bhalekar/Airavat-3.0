@@ -29,6 +29,16 @@ export interface ChargeSection {
   bnssMapping?: string // For IPC to BNSS transition
 }
 
+export interface MultiAgentDebate {
+  verdict: string           // 'RELEASE' | 'HOLD_FOR_REVIEW' | 'ERROR'
+  reasoning: string         // Moderator's final reasoning
+  confidence: number        // 0-100
+  agentMessages: Array<{
+    agent: string           // 'Defense Counsel' | 'Public Prosecutor' | 'Social Worker'
+    content: string
+  }>
+}
+
 export interface EligibilityAssessment {
   isEligible: boolean
   status: CaseStatus
@@ -44,6 +54,7 @@ export interface EligibilityAssessment {
   timestamp: string
   requiresLawyerReview: boolean
   requiresHumanResolution: boolean
+  multiAgentDebate?: MultiAgentDebate  // Present if AI debate has been run
 }
 
 export interface Hearing {

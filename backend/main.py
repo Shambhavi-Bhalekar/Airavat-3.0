@@ -187,8 +187,17 @@ async def run_multi_agent_orchestrator(id: str):
         # Run Moderator
         moderator_result = await run_agent13(context)
         
-        # Save Verdict strictly to the known `reason` columns so the Frontend reasoning-chain.tsx receives the update
-        reason_string = f"Agentic Verdict: {moderator_result['consensus']['verdict']}. {moderator_result['consensus']['reasoning']}"
+        # Save Verdict + full transcript to `reason` with a special prefix so the
+        # frontend reasoning-chain.tsx can detect and render it as a debate chat.
+        # Format: MULTIAGENT::<verdict>|<reasoning>|<confidence>|<full transcript>
+        transcript_clean = debate_result["transcript"].replace("\n", "\\n")
+        reason_string = (
+            f"MULTIAGENT::"
+            f"{moderator_result['consensus']['verdict']}|"
+            f"{moderator_result['consensus']['reasoning']}|"
+            f"{moderator_result['consensus']['confidence']}|"
+            f"{transcript_clean}"
+        )
         supabase.table("cases").update({
             "reason": reason_string,
             "confidence": moderator_result['consensus']['confidence'] / 100.0
@@ -218,49 +227,59 @@ def predict_all_cases():
         cases = res.data
         
         updated_cases = []
+        failed_cases = []
         for case in cases:
-            # Re-compute detention just in case
-            detention_days = calculate_detention_days(case.get("date_of_occurrence"))
-            case["detention_days"] = detention_days
-            
-            prompt = format_gemma_prompt(case)
-            ml_result = compute_score(case, prompt)
-            
-            updates = ml_result
-            updates["detention_days"] = detention_days
-            
-            # Predict adjournment using local joblib model
-            delay_result = predict_delay(case)
-            updates["adjournment_prob"] = int(delay_result["delay_probability"])
-            updates["delay_decision"] = delay_result["decision"]
-            
-            # Predict Surety/Financial Access logic
-            finance_result = evaluate_surety(case)
-            updates.update(finance_result)
-            
-            if "bailable" in case:
-                updates["eligible"] = True if case.get("bailable") == "Bailable" else False
-                llm_reason = ml_result.get("reasoning")
-                updates["reason"] = llm_reason if llm_reason else f"Eligible={updates['eligible']}, Detention={detention_days}, Delay Prob={updates['adjournment_prob']}%"
+            try:
+                # Re-compute detention just in case
+                detention_days = calculate_detention_days(case.get("date_of_occurrence"))
+                case["detention_days"] = detention_days
+                
+                prompt = format_gemma_prompt(case)
+                ml_result = compute_score(case, prompt)
+                
+                # Make a clean copy so we don't mutate the original dict
+                updates = dict(ml_result)
+                updates["detention_days"] = detention_days
+                
+                # Predict adjournment using local joblib model
+                delay_result = predict_delay(case)
+                updates["adjournment_prob"] = int(delay_result["delay_probability"])
+                
+                # Predict Surety/Financial Access logic
+                finance_result = evaluate_surety(case)
+                updates.update(finance_result)
+                
+                if "bailable" in case:
+                    updates["eligible"] = True if case.get("bailable") == "Bailable" else False
+                    llm_reason = ml_result.get("reasoning")
+                    updates["reason"] = llm_reason if llm_reason else f"Eligible={updates['eligible']}, Detention={detention_days}, Delay Prob={updates['adjournment_prob']}%"
 
-            # Push back to DB safely — strip derived/non-schema keys first
-            updates.pop("delay_decision", None)
-            updates.pop("reasoning", None)
-            updates.pop("section_440_brief", None)
-            updates.pop("section_440_flag", None)
-            updates.pop("bail_delay_days", None)
-            updates.pop("surety_blocked", None)
-            supabase.table("cases").update(updates).eq("id", case["id"]).execute()
-            updated_cases.append(case["id"])
+                # ── Strip ALL derived / non-schema / constrained keys before pushing ──
+                for key in ["delay_decision", "reasoning", "section_440_brief",
+                            "section_440_flag", "bail_delay_days", "surety_blocked",
+                            "conflict_flag"]:   # conflict_flag has a DB CHECK constraint — never overwrite on re-score
+                    updates.pop(key, None)
+
+                supabase.table("cases").update(updates).eq("id", case["id"]).execute()
+                updated_cases.append(case["id"])
+                
+            except Exception as case_err:
+                # One bad case should never abort the entire batch
+                print(f"⚠️ Skipped case {case.get('id')}: {case_err}")
+                failed_cases.append({"id": case.get("id"), "error": str(case_err)})
+                continue
             
         return {
             "message": "Retroactive scoring complete via Local Gemma-4",
-            "updated_count": len(updated_cases), 
-            "updated_ids": updated_cases
+            "updated_count": len(updated_cases),
+            "failed_count": len(failed_cases),
+            "updated_ids": updated_cases,
+            "failed_cases": failed_cases,
         }
     except Exception as e:
         print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # ==========================================
 # SYSTEMIC PATTERN INTELLIGENCE ENDPOINTS
