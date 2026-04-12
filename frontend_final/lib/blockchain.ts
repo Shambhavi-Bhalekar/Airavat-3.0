@@ -104,3 +104,46 @@ export async function fetchLatestLog(caseId: string): Promise<BlockchainLog | nu
     return null;
   }
 }
+
+/**
+ * Retrieves ALL historical logs for a given case from the blockchain.
+ */
+export async function fetchAllLogs(caseId: string): Promise<BlockchainLog[]> {
+  try {
+    const provider = await getProvider();
+    
+    // We don't need a signer to read data securely
+    const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+
+    const logCountBigInt = await contract.getLogCount(caseId);
+    const logCount = Number(logCountBigInt);
+
+    if (logCount === 0) return []; // No logs yet
+
+    const allLogs: BlockchainLog[] = [];
+    
+    // Fetch all logs iteratively (for production use multicall, but this is fine for local testnet)
+    for (let i = 0; i < logCount; i++) {
+        const logResult = await contract.getLog(caseId, i);
+        
+        const rawTimestamp = Number(logResult[4]);
+        const displayTime = rawTimestamp > 0 
+          ? new Date(rawTimestamp * 1000).toLocaleString('en-IN') 
+          : "Unknown";
+
+        allLogs.push({
+          dataSources: logResult[0],
+          reasoningChain: logResult[1],
+          confidenceLevel: Number(logResult[2]),
+          paralegalResponse: logResult[3],
+          timestamp: displayTime,
+          loggedBy: logResult[5],
+        });
+    }
+
+    return allLogs;
+  } catch (error) {
+    console.error("Error fetching all logs:", error);
+    return [];
+  }
+}

@@ -11,6 +11,15 @@ from financial_intelligence import evaluate_surety
 from models import UserSignup, UserLogin, ClientCreate, CaseCreate
 from utils import calculate_detention_days, format_gemma_prompt, generate_audio_file, generate_translated_message, send_whatsapp_voice_note
 import traceback
+import sys
+
+# Dynamically link Multi-Agent folder
+multi_agent_path = os.path.join(os.path.dirname(__file__), "..", "Multi-Agent", "Project")
+if multi_agent_path not in sys.path:
+    sys.path.append(multi_agent_path)
+
+from debate import run_debate_round
+from moderate import run_agent13
 
 backend_env_path = os.path.join(os.path.dirname(__file__), ".env")
 root_env_path = os.path.join(os.path.dirname(__file__), "..", ".env")
@@ -142,6 +151,48 @@ def update_case(id: str, updates: dict = Body(...)):
         res = supabase.table("cases").update(updates).eq("id", id).execute()
         return res.data
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/case/{id}/orchestrate")
+async def run_multi_agent_orchestrator(id: str):
+    """Executes the Debate Panel and Moderator Agents contextually dynamically"""
+    try:
+        # Fetch case
+        case_res = supabase.table("cases").select("*").eq("id", id).execute()
+        if not case_res.data:
+            raise HTTPException(status_code=404, detail="Case not found")
+        case_dict = case_res.data[0]
+
+        # Structure context for Agents
+        context = {
+            "fir_bundle": case_dict.get("fir_number", ""),
+            "eligibility": {
+                "bailable": case_dict.get("bailable"),
+                "adjournment_prob": case_dict.get("adjournment_prob", 50),
+                "prison": case_dict.get("prison", "Unknown")
+            }
+        }
+
+        # Run Debate
+        debate_result = await run_debate_round(context)
+        context["debate_transcript"] = debate_result
+
+        # Run Moderator
+        moderator_result = await run_agent13(context)
+        
+        # Save Verdict strictly to the known `reason` columns so the Frontend reasoning-chain.tsx receives the update
+        reason_string = f"Agentic Verdict: {moderator_result['consensus']['verdict']}. {moderator_result['consensus']['reasoning']}"
+        supabase.table("cases").update({
+            "reason": reason_string,
+            "confidence": moderator_result['consensus']['confidence'] / 100.0
+        }).eq("id", id).execute()
+
+        return {
+            "transcript": debate_result["transcript"],
+            "verdict": moderator_result["consensus"]
+        }
+    except Exception as e:
+        print(traceback.format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/case/{id}")

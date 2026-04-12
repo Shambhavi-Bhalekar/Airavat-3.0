@@ -12,6 +12,7 @@ import { HearingCard } from "@/components/hearing-card"
 import { SuretyCard } from "@/components/surety-card"
 import { ReasoningChain } from "@/components/reasoning-chain"
 import { BlockchainLogCard } from "@/components/blockchain-log-card"
+import { AgenticVerdictCard } from "@/components/agentic-verdict-card"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -370,6 +371,9 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
 
             {/* Right Column - Actions & Quick Info */}
             <div className="space-y-6">
+
+              {/* Multi-Agent Panel */}
+              <AgenticVerdictCard caseId={caseData.id} onComplete={() => window.location.reload()} />
 
               {/* Blockchain Immunable Log UI (Pillar 05) */}
               <BlockchainLogCard 
