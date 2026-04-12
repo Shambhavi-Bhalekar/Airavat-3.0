@@ -4,8 +4,17 @@ import { Analytics } from '@vercel/analytics/next'
 import GTranslate from '@/components/gtranslate'
 import './globals.css'
 
+import type { Viewport } from 'next'
+
 const _inter = Inter({ subsets: ["latin"], variable: '--font-inter', preload: false });
 const _geistMono = Geist_Mono({ subsets: ["latin"], variable: '--font-geist-mono', preload: false });
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+}
 
 export const metadata: Metadata = {
   title: 'JusticeGrid - Undertrial Rights Management System',
@@ -37,7 +46,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${_inter.variable} ${_geistMono.variable} font-sans antialiased`}>
+      <body className={`${_inter.variable} ${_geistMono.variable} font-sans antialiased min-h-screen overflow-x-hidden max-w-full`}>
         {children}
         <GTranslate />
         {process.env.NODE_ENV === 'production' && <Analytics />}

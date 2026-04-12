@@ -11,6 +11,7 @@ import { EligibilityCard } from "@/components/eligibility-card"
 import { HearingCard } from "@/components/hearing-card"
 import { SuretyCard } from "@/components/surety-card"
 import { ReasoningChain } from "@/components/reasoning-chain"
+import { BlockchainLogCard } from "@/components/blockchain-log-card"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -370,7 +371,13 @@ export default function CaseDetailPage({ params }: CaseDetailPageProps) {
             {/* Right Column - Actions & Quick Info */}
             <div className="space-y-6">
 
-
+              {/* Blockchain Immunable Log UI (Pillar 05) */}
+              <BlockchainLogCard 
+                caseId={caseData.id}
+                reasoningChain={caseData.eligibility.reasoningChain.join('. ')}
+                confidence={caseData.eligibility.confidence.percentage}
+              />
+              
               {/* Next Hearing */}
               {caseData.nextHearing && (
                 <HearingCard hearing={caseData.nextHearing} isNext />
