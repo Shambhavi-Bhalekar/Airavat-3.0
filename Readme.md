@@ -346,6 +346,65 @@ The **adapter function** (`adaptBackendCase`) handles the field-name differences
 | GET | `/systemic-insights/surety-analysis` | Which surety amounts block bail, correlated with local poverty | Array of cities with blocking_ratio %, avg surety vs 90-day wage cap, confidence |
 | GET | `/alerts/pattern-adjournments` | Courts with 20+ eligible cases adjourned in quarter | CRITICAL/WARNING alerts by court, recommendations, confidence disclaimers |
 
+---
+
+## 🔗 Blockchain Integration (Immutable Audit Logs)
+
+JusticeGrid includes an optional local blockchain demo for immutable AI-assessment logging. The `blockchain/` folder contains:
+
+- `EligibilityLogger.sol` — a minimal Solidity contract that stores immutable AI assessment logs (case id, data sources, reasoning, confidence and paralegal action).
+- `deploy.js` — Node script that compiles and deploys the contract to a local Ganache instance, then writes the deployed address into `logger.js`.
+- `logger.js` — Example script that writes and reads back an immutable log entry using `ethers`.
+- `package.json` — small dependency list (`ethers`, `solc`).
+
+Quick demo steps (local Ganache required):
+
+1. Start Ganache (Ganache UI or `ganache-cli`) on port `7545` (or edit `deploy.js`/`logger.js` to match your RPC URL).
+2. From the `blockchain` folder install dependencies:
+
+```bash
+cd blockchain
+npm install
+```
+
+3. Deploy the contract (the script will compile with `solc` and deploy to your local chain):
+
+```bash
+node deploy.js
+```
+
+4. After deployment run the logger to push a sample immutable log:
+
+```bash
+node logger.js
+```
+
+Notes & safety: replace the `PRIVATE_KEY` in `deploy.js`/`logger.js` with an account from your local Ganache instance. Do not use real private keys. This integration is a demo to show how immutable audit logs could be attached to AI assessments (Pillar 05).
+
+---
+
+## 🤖 Multi-Agent Orchestrator (Evidence Aggregation & Pattern Detection)
+
+The repository includes a lightweight multi-agent orchestration framework under `Multi-Agent/Project/`. The orchestrator (`orchestrator.py`) demonstrates a sequence of specialized agent modules that together collect, extract and analyze case evidence:
+
+- `fir_extracter.py` — FIR extraction and normalization (agent 1)
+- `case_scraper.py` — related-case scraping and corpus assembly (agent 2)
+- `eligibility_engine.py` — eligibility reasoning (agent 3)
+- `pattern_detector.py` — systemic pattern detection (agent 4)
+- `graph_engine.py` — knowledge graph builder (agent 5)
+- `debate.py`, `moderate.py`, `sentiment.py` — debate/verification and moderation agents
+- `orchestrator.py` — coordinates agents, caches intermediate results, and prints a terminal summary
+
+Run the orchestrator (Python 3.10+ required):
+
+```bash
+python Multi-Agent/Project/orchestrator.py <CASE_ID>
+```
+
+The orchestrator is a demonstration harness: individual agents gracefully fall back to mocked results if external services or keys are missing. It is useful for offline research and for integrating structured agent outputs into the main backend pipeline.
+
+---
+
 ### Webhooks
 
 | Method | Endpoint | Triggered By |

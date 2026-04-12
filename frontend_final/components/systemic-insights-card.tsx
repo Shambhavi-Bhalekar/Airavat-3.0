@@ -81,7 +81,7 @@ export function SystemicInsightsCard({
                     </div>
                   ) : (
                     <span className="font-semibold text-right">
-                      {typeof value === "number" ? value.toFixed(1) : String(value)}
+                      {typeof value === "number" ? (value as any).toFixed(1) : String(value)}
                     </span>
                   )}
                 </div>
